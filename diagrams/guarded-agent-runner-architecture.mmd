@@ -1,0 +1,27 @@
+flowchart LR
+    Operator[Human operator] --> UI[React control plane]
+    UI --> API[FastAPI run API]
+
+    Planner[Untrusted deterministic planner]
+    API --> Planner
+    API --> Scope[Immutable capability compiler]
+    Planner --> Policy[Fail-closed policy engine]
+    Scope --> Policy
+    Policy --> Decision{Remediation needed?}
+    Decision -->|No| Skip[Audited skip]
+    Decision -->|NGINX auto| Executor[Guarded typed executor]
+    Decision -->|Privileged| Approval[Exact human approval]
+    Approval --> Revalidation[Resume-time revalidation]
+    Revalidation --> Executor
+    Executor --> Infrastructure[Fake infrastructure]
+    Executor --> Verify[Independent outcome verification]
+    Skip --> Verify
+    Verify --> Audit[(SQLite run and audit store)]
+    API --> Audit
+
+    classDef untrusted fill:#fff3d6,stroke:#d8992c,color:#553800;
+    classDef guard fill:#dff2e9,stroke:#1b6b52,color:#123c31;
+    classDef data fill:#e8edf3,stroke:#4e6478,color:#22313f;
+    class Planner untrusted;
+    class Scope,Policy,Decision,Approval,Revalidation,Executor,Verify guard;
+    class Infrastructure,Audit data;
