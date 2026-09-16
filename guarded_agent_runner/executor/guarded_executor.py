@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from guarded_agent_runner.executor.fake_infra import FakeInfrastructure
+from guarded_agent_runner.executor.infrastructure import InfrastructureAdapter
 from guarded_agent_runner.models import ExecutionToken, ToolCall, utcnow
 
 EXECUTOR_ACTIONS = {"service_status", "read_log", "restart_service"}
@@ -17,7 +17,7 @@ class ExecutionTimedOut(RuntimeError):
 
 
 class GuardedExecutor:
-    def __init__(self, infrastructure: FakeInfrastructure, timeout_seconds: float = 2.0) -> None:
+    def __init__(self, infrastructure: InfrastructureAdapter, timeout_seconds: float = 2.0) -> None:
         self.infrastructure = infrastructure
         self.timeout_seconds = timeout_seconds
 

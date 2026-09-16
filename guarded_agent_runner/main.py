@@ -10,6 +10,8 @@ from fastapi.staticfiles import StaticFiles
 from guarded_agent_runner.api.routes_approvals import router as approvals_router
 from guarded_agent_runner.api.routes_audit import router as audit_router
 from guarded_agent_runner.api.routes_runs import router as runs_router
+from guarded_agent_runner.api.routes_sandbox import router as sandbox_router
+from guarded_agent_runner.executor.sandbox_http import SandboxHTTPInfrastructure
 from guarded_agent_runner.service import RunnerError, RunnerService
 from guarded_agent_runner.storage.repository import Repository
 
@@ -24,11 +26,17 @@ def create_app(repository: Repository | None = None, runner_service: RunnerServi
         description="Capability-scoped, human-approved infrastructure action runner",
     )
     repository = repository or Repository(os.getenv("DATABASE_URL", "sqlite:///./guarded_agent_runner.db"))
-    app.state.runner_service = runner_service or RunnerService(repository)
+    if runner_service is None:
+        sandbox_url = os.getenv("SANDBOX_SERVICE_URL")
+        infrastructure = SandboxHTTPInfrastructure(sandbox_url) if sandbox_url else None
+        runner_service = RunnerService(repository, infrastructure=infrastructure)
+    app.state.runner_service = runner_service
 
     app.include_router(runs_router)
     app.include_router(approvals_router)
     app.include_router(audit_router)
+    if os.getenv("DEMO_MODE", "").lower() in {"1", "true", "yes"}:
+        app.include_router(sandbox_router)
 
     @app.exception_handler(RunnerError)
     async def runner_error_handler(_: Request, exc: RunnerError):

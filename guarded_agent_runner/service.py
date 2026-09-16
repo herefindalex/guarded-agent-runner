@@ -9,6 +9,8 @@ from guarded_agent_runner.audit import audit_event
 from guarded_agent_runner.capability import compile_scope
 from guarded_agent_runner.executor.fake_infra import FakeInfrastructure
 from guarded_agent_runner.executor.guarded_executor import GuardedExecutor
+from guarded_agent_runner.executor.infrastructure import InfrastructureAdapter
+from guarded_agent_runner.executor.sandbox_http import SandboxHTTPInfrastructure
 from guarded_agent_runner.models import (
     ActionStatus,
     ApprovalRequest,
@@ -47,7 +49,7 @@ class RunnerService:
         *,
         planner: DeterministicPlanner | None = None,
         policy: PolicyEngine | None = None,
-        infrastructure: FakeInfrastructure | None = None,
+        infrastructure: InfrastructureAdapter | None = None,
         run_ttl_seconds: float = 900,
         approval_ttl_seconds: float = 300,
         execution_timeout_seconds: float = 2,
@@ -60,6 +62,16 @@ class RunnerService:
         self.run_ttl_seconds = run_ttl_seconds
         self.approval_ttl_seconds = approval_ttl_seconds
         self._locks: defaultdict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+
+    async def sandbox_snapshot(self, *, lines: int = 100) -> dict:
+        if not isinstance(self.infrastructure, SandboxHTTPInfrastructure):
+            raise NotFoundError("Demo sandbox is not configured")
+        return await self.infrastructure.snapshot(lines=lines)
+
+    async def reset_sandbox(self) -> dict:
+        if not isinstance(self.infrastructure, SandboxHTTPInfrastructure):
+            raise NotFoundError("Demo sandbox is not configured")
+        return await self.infrastructure.reset()
 
     def create_run(
         self,
@@ -116,6 +128,7 @@ class RunnerService:
                 RunStatus.REJECTED,
                 RunStatus.COMPLETED,
                 RunStatus.FAILED,
+                RunStatus.STALE,
                 RunStatus.EXPIRED,
                 RunStatus.CANCELLED,
             }:
@@ -143,6 +156,7 @@ class RunnerService:
                 RunStatus.REJECTED,
                 RunStatus.COMPLETED,
                 RunStatus.FAILED,
+                RunStatus.STALE,
                 RunStatus.EXPIRED,
                 RunStatus.CANCELLED,
             }:
@@ -278,6 +292,34 @@ class RunnerService:
         failure = revalidate_approval(run, call, approval, self.policy)
         if failure:
             return self._fail_resume(run, call, failure)
+        if approval is None or approval.precondition is None:
+            return self._fail_resume(run, call, "MISSING_PRECONDITION")
+
+        try:
+            observed = await asyncio.wait_for(
+                self.infrastructure.execute("service_status", {"service": call.resource}),
+                timeout=self.executor.timeout_seconds,
+            )
+        except Exception as exc:
+            return self._fail_resume(run, call, f"PRECONDITION_REVALIDATION_FAILED:{type(exc).__name__}")
+
+        tracked_fields = ("status", "pid", "generation")
+        expected_state = {
+            field: approval.precondition[field]
+            for field in tracked_fields
+            if field in approval.precondition
+        }
+        observed_state = {field: observed.get(field) for field in expected_state}
+        if observed_state != expected_state:
+            return self._fail_stale(run, call, expected_state, observed_state)
+
+        self._audit_call(
+            run,
+            AuditEventType.RESUME_REVALIDATION_SUCCEEDED,
+            call,
+            actor="runner",
+            metadata={"expected": expected_state, "observed": observed_state},
+        )
         call.status = ActionStatus.APPROVED
         transition_run(run, RunStatus.RUNNING)
         self.repository.save_run(run)
@@ -291,6 +333,7 @@ class RunnerService:
                 RunStatus.REJECTED,
                 RunStatus.COMPLETED,
                 RunStatus.FAILED,
+                RunStatus.STALE,
                 RunStatus.EXPIRED,
                 RunStatus.CANCELLED,
             }:
@@ -452,6 +495,31 @@ class RunnerService:
         transition_run(run, target)
         self.repository.save_run(run)
         self._audit(run, AuditEventType.RUN_FAILED, actor="runner", metadata={"reason": reason})
+        return run
+
+    def _fail_stale(self, run: Run, call, expected: dict, observed: dict) -> Run:
+        call.status = ActionStatus.STALE
+        call.failure_reason = "STALE_PRECONDITION"
+        run.last_error = "STALE_PRECONDITION"
+        self._audit_call(
+            run,
+            AuditEventType.RESUME_REVALIDATION_FAILED,
+            call,
+            actor="runner",
+            metadata={
+                "reason": "STALE_PRECONDITION",
+                "expected": expected,
+                "observed": observed,
+            },
+        )
+        transition_run(run, RunStatus.STALE)
+        self.repository.save_run(run)
+        self._audit(
+            run,
+            AuditEventType.RUN_FAILED,
+            actor="runner",
+            metadata={"reason": "STALE_PRECONDITION"},
+        )
         return run
 
     def _audit(

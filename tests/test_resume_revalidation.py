@@ -47,3 +47,19 @@ async def test_resume_revalidates_user_authorization(service, infrastructure):
     assert result.status is RunStatus.FAILED
     assert result.last_error == "USER_AUTHORIZATION_REVOKED"
     assert all(action != "restart_service" for action, _ in infrastructure.executed_actions)
+
+
+@pytest.mark.asyncio
+async def test_resume_revalidates_live_service_precondition(service, infrastructure):
+    run, approval = await advance_to_approval(service)
+    assert approval is not None
+    await service.approve(approval.id, "operator")
+
+    infrastructure.services["postgresql"]["status"] = "running"
+    result = await service.step(run.id)
+
+    assert result.status is RunStatus.STALE
+    assert result.last_error == "STALE_PRECONDITION"
+    assert result.pending_action is not None
+    assert result.pending_action.status.value == "STALE"
+    assert all(action != "restart_service" for action, _ in infrastructure.executed_actions)
