@@ -1,0 +1,4 @@
+# Must exactly match the owner-controlled enrollment. The placeholder disables
+# the plugin so an unpaired guard cannot be mistaken for authoritative evidence.
+pairing-id: REQUIRED_CHANGE_ME
+snapshot-file: runtime-observation.json

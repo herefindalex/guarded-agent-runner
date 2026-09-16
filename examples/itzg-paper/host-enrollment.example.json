@@ -1,0 +1,13 @@
+{
+  "schema_version": "gar.host-observer-config.v1",
+  "enrollment_id": "paper-reference-read-only",
+  "deployment_generation": 1,
+  "container_id": "REPLACE_WITH_64_LOWERCASE_HEX_CONTAINER_ID",
+  "data_root_path": "/REPLACE/ABSOLUTE/PATH/examples/itzg-paper/data",
+  "managed_plugin_slots": {
+    "gar-guard": "GARGuard.jar"
+  },
+  "docker_socket_path": "/var/run/docker.sock",
+  "snapshot_path": "/REPLACE/ABSOLUTE/PATH/examples/itzg-paper/evidence/observation/host-observation.json",
+  "interval_seconds": 2
+}

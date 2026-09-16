@@ -1,0 +1,7 @@
+name: GARGuard
+version: '0.1.0'
+main: io.gar.paper.GarGuardPlugin
+description: Bounded runtime observation source for Guarded Agent Runner
+api-version: '1.21.11'
+authors:
+  - Guarded Agent Runner

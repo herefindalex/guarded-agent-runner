@@ -1,0 +1,41 @@
+services:
+  paper:
+    image: itzg/minecraft-server:java25@sha256:46919d151d39e89993c40fa3cedddd200b1bbb4aa44217e17a638c047817b9f4
+    restart: "no"
+    stop_grace_period: 2m
+    environment:
+      EULA: ${MINECRAFT_EULA:?Set MINECRAFT_EULA=TRUE only after accepting the Minecraft EULA}
+      TYPE: PAPER
+      VERSION: "26.2"
+      PAPER_BUILD: "124"
+      MEMORY: 2G
+      ONLINE_MODE: "FALSE"
+      ENABLE_RCON: "FALSE"
+      ENABLE_AUTOPAUSE: "FALSE"
+      ENABLE_AUTOSTOP: "FALSE"
+      # Prevent startup from fetching mutable default configs from a branch.
+      SKIP_DOWNLOAD_DEFAULTS: "TRUE"
+      USE_AIKAR_FLAGS: "TRUE"
+    volumes:
+      - ./data:/data
+      - ../../plugins/paper-guard/build/libs/gar-paper-guard-0.1.0.jar:/data/plugins/GARGuard.jar:ro
+      - ./guard-config.yml:/data/plugins/GARGuard/config.yml:ro
+    # Deliberately no published game or management port in the read-only
+    # conformance fixture. M0 admission-gate testing requires a separate,
+    # explicitly authorized profile.
+    healthcheck:
+      test: ["CMD", "mc-health"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 2m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # The image starts as root, fixes /data ownership, then drops to its
+    # minecraft user. Keep only the capabilities required for that transition.
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
