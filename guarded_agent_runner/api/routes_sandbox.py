@@ -17,4 +17,3 @@ async def snapshot(request: Request, lines: int = Query(default=100, ge=1, le=10
 @router.post("/reset")
 async def reset(request: Request):
     return await service(request).reset_sandbox()
-

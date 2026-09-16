@@ -72,4 +72,3 @@ async def test_sandbox_adapter_exposes_only_service_a(monkeypatch):
 
     with pytest.raises(ValueError, match="only exposes service-a"):
         await adapter.execute("service_status", {"service": "nginx"})
-

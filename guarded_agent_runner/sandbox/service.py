@@ -183,4 +183,3 @@ def create_app() -> FastAPI:
         return await request.app.state.manager.reset()
 
     return app
-
