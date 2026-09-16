@@ -99,7 +99,7 @@ Replace placeholders with the actual lower-case GitHub owner and repository.
 
 - [ ] Confirm CI and secret scan passed on the release commit.
 - [ ] Confirm the capability and status documents match shipped behavior.
-- [ ] Confirm release notes state `NO LLM CONNECTED` and fake infrastructure.
+- [ ] Confirm release notes state `NO LLM CONNECTED`, `M1 FAKE TARGET ONLY`, and Paper mutation gates `NOT_RUN`.
 - [ ] Confirm no screenshot or log contains private identifiers or credentials.
 - [ ] Confirm the image starts as a non-root user and `/health` passes.
 - [ ] Confirm there is no automatic infrastructure deployment.

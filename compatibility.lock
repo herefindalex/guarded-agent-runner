@@ -1,0 +1,87 @@
+{
+  "schema_version": "gar.compatibility.v1",
+  "specification": "GAR-PCS-001@v0.1-r1",
+  "source": {
+    "commit": "adf730d34bf07914243bf839bf0acdbdcf4abe6c",
+    "worktree_state": "COMMITTED_SOURCE_WITH_IGNORED_RUNTIME_EVIDENCE",
+    "evidence_date": "2026-09-16"
+  },
+  "tested_tuples": [
+    {
+      "evidence_level": "LOCAL_PAPER_READ_ONLY",
+      "support_scope": "READ_ONLY_ONLY",
+      "paper": {
+        "minecraft_version": "26.2",
+        "paper_version": "26.2",
+        "paper_build": "124",
+        "paper_revision": "22ca6c7",
+        "server_jar_sha256": "274bbcb9807ad79a479617ce695a7c0686e652a8d1cabfd0e288d92a3ea29593"
+      },
+      "java": {
+        "distribution": "Eclipse Temurin",
+        "version": "25.0.4+7-LTS"
+      },
+      "itzg_image": {
+        "reference": "itzg/minecraft-server:java25",
+        "manifest_digest": "sha256:46919d151d39e89993c40fa3cedddd200b1bbb4aa44217e17a638c047817b9f4",
+        "local_image_id": "sha256:f9a336e67e49053b6dfd5c10fd2d15f157a65f0edb56d3603159ee8388933253"
+      },
+      "host": {
+        "docker_engine": "29.1.3",
+        "docker_api": "1.52",
+        "docker_compose": "2.40.3+ds1-0ubuntu1~24.04.1",
+        "kernel": "Linux 7.0.0-31-generic",
+        "architecture": "x86_64",
+        "filesystem_reported_by_statfs": "ext2/ext3"
+      },
+      "guard": {
+        "name": "GARGuard",
+        "version": "0.1.0",
+        "jar_sha256": "d6edf8506014a2e44a982692006772863eb7a5bae648d80acac5f2552fa404eb",
+        "jar_size": 17120
+      },
+      "fixture_identity": {
+        "deployment_generation": 3,
+        "container_id": "2317ce3d869a689a4334503815f61e3d841196647b2511e063291f421066d0eb",
+        "data_root_identity": "dev:2050/inode:12238175",
+        "bootstrap_fingerprint": "cfc883efcb7cc0dcacbe342d18c4c248980d8615b9b6e9d49c077179db499a51",
+        "inventory_digest": "e0b80021f7447516db2a5d4ee70958e9040c8192919794d4243a03ae1f67d14e"
+      },
+      "evidence": {
+        "repeated_startup": "PASS",
+        "graceful_stop_observed": "PASS_WITHOUT_BACKUP_READY_ORACLE",
+        "host_snapshot": "PASS",
+        "paper_runtime_snapshot": "PASS",
+        "mcp_read_only_interoperability": "PASS",
+        "mcp_tool_count": 10,
+        "mcp_approval_tool_present": false,
+        "admission_barrier": {
+          "gate_binary_sha256": "12bacff0a48028a851c3f5f18feb10b40683b2bc7677705c6a77d4b22a3cc758",
+          "ipv4_loopback_closed_open": "PASS",
+          "ipv6_loopback_closed_open": "PASS",
+          "bounded_open_lease": "PASS",
+          "runtime_guard_pairing": "PASS",
+          "inflight_tcp_drop_on_close": "PASS",
+          "gate_container_restart_defaults_closed": "PASS",
+          "paper_container_restart_defaults_closed": "PASS",
+          "docker_binding_observer": "PASS",
+          "host_reboot": "NOT_RUN",
+          "minecraft_inflight_login": "NOT_RUN"
+        },
+        "verified_plugin_transitions": [],
+        "mutation": "NOT_RUN"
+      }
+    }
+  ],
+  "mutation_enabled": false,
+  "gates": {
+    "G-01": "PASS",
+    "G-02": "FAIL",
+    "G-03": "NOT_RUN",
+    "G-04": "FAIL",
+    "G-05": "NOT_RUN",
+    "G-06": "NOT_RUN",
+    "G-07": "NOT_RUN"
+  },
+  "reason": "The exact tuple has LOCAL_PAPER read-only evidence only. Mutation remains hard-disabled. G-02 has a fail-closed leased TCP gate, paired Paper login guard, and Docker binding observation, but still fails until host-reboot and in-flight Minecraft login cases pass. Runtime source attribution is unavailable (G-04), while stop/backup, real plugin transition, crash recovery, and independent-admin onboarding gates remain incomplete."
+}
