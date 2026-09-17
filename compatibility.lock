@@ -2,8 +2,8 @@
   "schema_version": "gar.compatibility.v1",
   "specification": "GAR-PCS-001@v0.1-r1",
   "source": {
-    "commit": "ca97ca0274f0ee68e68fca65c8a99f6bfdca390d",
-    "worktree_state": "COMMITTED_SOURCE_WITH_IGNORED_RUNTIME_EVIDENCE",
+    "commit": "f81db08963f92b2fb661d33f735ddbc2b4d19441",
+    "worktree_state": "CLEAN_TRACKED_SOURCE_AT_G03_RUN_WITH_IGNORED_RUNTIME_EVIDENCE",
     "evidence_date": "2026-09-17"
   },
   "tested_tuples": [
@@ -98,6 +98,38 @@
             ]
           }
         },
+        "g03_acceptance": {
+          "status": "FAIL",
+          "evidence_level": "LOCAL_PAPER",
+          "source_commit": "f81db08963f92b2fb661d33f735ddbc2b4d19441",
+          "intent_id": "intent_61467c63d50c22da117222676aa21901",
+          "intent_digest": "8f2b1ddfffd4d1d933194599cc630c5be17230190f6ab70d4f5dbffc74f1801d",
+          "intent_record_sha256": "0e7cc905d1c2401d597034d5a7caba50282b8c4790806366bde1373ed7b99573",
+          "approval_id": "approval_f85ceb10b11b04c3f659fba2331a8464",
+          "operation_id": "operation_a6df25e57de1b178707d3f46a13e1c80",
+          "operation_record_sha256": "4dc76d4f654963298a98741558df4abeffcf9c39a73bb12c68d3d6c7fc9bd6b5",
+          "enrollment_id": "paper-reference-read-only",
+          "deployment_generation": 3,
+          "container_id": "2317ce3d869a689a4334503815f61e3d841196647b2511e063291f421066d0eb",
+          "data_root_identity": "dev:2050/inode:12238175",
+          "paper_tuple": "paper-26.2-build.124/java-25/itzg-image-sha256-46919d151d39",
+          "pairing_id": "gar-reference-pairing-2026-09",
+          "paper_boot_id": "63de1623-54db-46e5-abe0-422544483138",
+          "s00_claim": "PASS",
+          "s01_revalidate": "PASS",
+          "s02_maintenance": "PASS",
+          "s03_graceful_stop": "UNKNOWN",
+          "s04_offline_revalidation": "BLOCKED",
+          "s05_backup": "BLOCKED",
+          "container_exit_code": 0,
+          "container_oom_killed": false,
+          "backup_record": "NOT_CREATED",
+          "archive": "NOT_CREATED",
+          "failure": "DISPATCH_OUTCOME_UNKNOWN",
+          "root_cause": "Docker Engine logs endpoint rejected an RFC3339Nano since parameter with HTTP 500; the corrected adapter uses integer Unix seconds and enforces the exact dispatch boundary from each log timestamp",
+          "retry_performed": false,
+          "ownership_released": false
+        },
         "verified_plugin_transitions": [],
         "mutation": "NOT_RUN"
       }
@@ -107,11 +139,11 @@
   "gates": {
     "G-01": "PASS",
     "G-02": "PASS",
-    "G-03": "NOT_RUN",
+    "G-03": "FAIL",
     "G-04": "FAIL",
     "G-05": "NOT_RUN",
     "G-06": "NOT_RUN",
     "G-07": "NOT_RUN"
   },
-  "reason": "G-01 retains historical exact-tuple read-only evidence. G-02 now has passing real IPv4/IPv6 Login Start close and HOST_RECOVERY evidence from the existing reboot; no additional host reboot was performed for verification. Mutation remains hard-disabled. G-03 has a UNIT/FAKE_TARGET S00-S05 stop/backup foundation but no live stop adapter or real approved-target backup acceptance. Runtime source attribution remains unavailable (G-04). Real plugin transition, ambiguous mutation recovery, and independent-admin onboarding gates remain incomplete."
+  "reason": "G-01 retains historical exact-tuple read-only evidence. G-02 has passing real IPv4/IPv6 Login Start close and HOST_RECOVERY evidence from the existing reboot; no additional host reboot was performed for verification. Mutation remains hard-disabled. The real approved G-03 LOCAL_PAPER campaign passed S00-S02 and stopped Paper cleanly, but S03 became UNKNOWN when Docker rejected the shutdown-log query; S04/S05 were blocked and no backup was created, so G-03 is FAIL. Runtime source attribution remains unavailable (G-04). Real plugin transition, ambiguous mutation recovery, and independent-admin onboarding gates remain incomplete."
 }
