@@ -63,8 +63,10 @@ itzg image, GARGuard loading, fresh host/runtime snapshots, restart pairing,
 all ten authenticated MCP read/propose/query tools, the leased IPv4/IPv6 TCP
 gate, Paper runtime acknowledgment, pre-login maintenance state, connection
 drop on close, restart-to-closed behavior, Docker admission topology, and gate
-binary/command/evidence-mount attribution. Host
-reboot and real in-flight Minecraft login remain untested, so G-02 remains
+binary/command/evidence-mount attribution. A real Paper protocol 776 Login
+Start was observed in flight and terminated nine milliseconds after
+owner-local close with zero players before and after. The host-reboot
+checkpoint is prepared but has not crossed a real kernel boot, so G-02 remains
 `FAIL`. `HOST_RECOVERY`, real plugin transition, mutation, and `BETA` cases
 remain `NOT_RUN`. The MCP server is stateless so authority is resolved again
 for every HTTP request.
@@ -72,9 +74,9 @@ for every HTTP request.
 ## Deliberately blocked
 
 - Paper and host observation paths passed an authorized isolated read-only run; no independent administrator has completed G-07 onboarding.
-- The fail-closed admission gate, Paper login guard, and Docker binding observer
-  exist, but G-02 remains failed until host reboot and real in-flight Minecraft
-  login behavior are demonstrated.
+- The fail-closed admission gate, Paper login guard, Docker binding observer,
+  and real in-flight Minecraft login-close probe exist, but G-02 remains failed
+  until the prepared checkpoint is verified across a real host reboot.
 - No Docker lifecycle controller, artifact importer, backup engine, or
   filesystem replacer exists.
 - No live mutation entry point exists. `StartMutation` returns
@@ -85,7 +87,7 @@ for every HTTP request.
 
 ## Next executable milestone
 
-M0 still needs the remaining G-02 host-reboot and Minecraft-login evidence, a
+M0 still needs the remaining G-02 host-reboot evidence, a
 backup-ready graceful-stop oracle, loader/source attribution, and a real
 supported plugin transition for G-03 through G-05. The remainder of M2 is G-07
 permission/onboarding evidence from an independent administrator. Mutation

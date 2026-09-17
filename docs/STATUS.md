@@ -27,8 +27,9 @@ This document separates implemented behavior from locally verified evidence and 
 | Paper admission guard | `LOCAL_VERIFIED`; maintenance rejects pre-login, a fresh matching lease reports `OPEN_READ_ONLY_ALPHA`, and missing/stale/cross-generation state fails closed |
 | Fixed-target host observer and composite adapter | `LOCAL_VERIFIED`; exact container/image/data-root identity, lifecycle, artifact hashes, freshness, boot pairing, gate topology, and loopback binding policy observed against the isolated fixture |
 | Admission TCP gate | `LOCAL_VERIFIED`; IPv4/IPv6 closed/open checks, bounded lease, runtime acknowledgment, in-flight TCP drop, and gate/Paper restart-to-closed behavior passed |
+| Minecraft in-flight login-close | `LOCAL_PAPER`; protocol 776 Login Start remained in flight before close, connection terminated in 9 ms, players stayed zero |
 | Read-only MCP tools | `LOCAL_VERIFIED`; exactly 10 tools, no approval tool, live health/player/performance/plugin/error/change reads; backup honestly unavailable |
-| Host recovery, real plugin transition, mutation beta | `NOT_RUN`; G-02 remains failed pending host reboot and real in-flight Minecraft login checks; G-04 source attribution and G-03/G-05/G-06/G-07 remain incomplete |
+| Host recovery, real plugin transition, mutation beta | Host reboot checkpoint `PREPARED` but not executed; G-02 remains `FAIL`; G-04 source attribution and G-03/G-05/G-06/G-07 remain incomplete |
 
 Detailed mapping: [GAR v0.1 implementation status](GAR_V01_IMPLEMENTATION.md).
 

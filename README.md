@@ -21,9 +21,9 @@ combined.
 > **Current release boundary:** one exact Paper/itzg tuple has locally verified
 > read-only interoperability and admission-barrier evidence. Live plugin
 > mutation remains programmatically disabled. `compatibility.lock` keeps G-02
-> at `FAIL` until host reboot and real in-flight Minecraft login behavior are
-> verified, even though the TCP gate, Paper login guard, and Docker binding
-> observer are implemented. This is not production or beta readiness.
+> at `FAIL`: a real in-flight Minecraft login-close probe now passes, but the
+> prepared host-reboot checkpoint still needs a real reboot and post-boot
+> verification. This is not production or beta readiness.
 
 ## Why GAR exists
 
@@ -207,7 +207,7 @@ filesystem, plugin, or configuration tuple is supported.
 | Gate | Status | What the status means |
 |---|---|---|
 | G-01 | `PASS` | Exact tuple has reproducible local read-only startup evidence |
-| G-02 | `FAIL` | Admission components and Docker observation pass, but host reboot and real in-flight Minecraft login cases are still missing |
+| G-02 | `FAIL` | Real Minecraft Login Start is terminated fail-closed with zero players; host-reboot verification is still pending |
 | G-03 | `NOT_RUN` | No backup-ready graceful-stop oracle or offline backup engine |
 | G-04 | `FAIL` | Runtime artifact source attribution remains unavailable |
 | G-05 | `NOT_RUN` | No verified real plugin A-to-B transition |

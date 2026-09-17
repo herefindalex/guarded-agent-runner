@@ -87,7 +87,38 @@ shared Paper network namespace, exact loopback bindings, read-only rootfs,
 dropped capabilities, restart policy, and absence of a Docker socket mount.
 
 The profile locally passed IPv4/IPv6 closed/open checks, bounded lease and
-runtime acknowledgment, active TCP connection drop on close, and gate/Paper
-restart-to-closed checks. It remains development evidence: host reboot and a
-real in-flight Minecraft login still need testing. G-02 must remain `FAIL`
-until that complete path is demonstrated.
+runtime acknowledgment, active TCP connection drop on close, gate/Paper
+restart-to-closed checks, and a real Paper protocol Login Start connection
+terminated on close with zero players. Host-reboot verification remains
+pending, so G-02 must remain `FAIL` until that complete path is demonstrated.
+
+## G-02 acceptance harness
+
+Copy `g02-acceptance.example.json` into an ignored owner-only directory and
+replace every placeholder from the owner-controlled admission and GAR server
+configs. The harness rejects endpoints that do not match the fixed admission
+listener and rejects identities that do not match the GAR enrollment.
+
+```bash
+chmod 700 /absolute/owner-only/g02-directory
+chmod 600 /absolute/owner-only/g02-directory/config.json
+go run ./cmd/gar-g02-verify minecraft-login-close \
+  --config /absolute/owner-only/g02-directory/config.json
+go run ./cmd/gar-g02-verify host-reboot-prepare \
+  --config /absolute/owner-only/g02-directory/config.json
+```
+
+The first command discovers the exact Paper protocol through the gate, sends
+a real Login Start, closes admission, requires the in-flight connection to be
+terminated, and requires a fresh runtime snapshot with zero players. The
+second command records the current kernel boot ID and closed endpoint. It does
+not reboot the host. After an explicitly authorized real reboot, run:
+
+```bash
+go run ./cmd/gar-g02-verify host-reboot-verify \
+  --config /absolute/owner-only/g02-directory/config.json
+```
+
+Only a changed kernel boot ID plus a still-closed endpoint can produce
+`HOST_RECOVERY` PASS evidence. Unit tests or a container restart cannot replace
+this host-reboot observation.

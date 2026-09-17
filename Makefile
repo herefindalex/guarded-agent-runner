@@ -35,7 +35,7 @@ go-test:
 	go vet ./...
 
 admission-verify:
-	go test -race ./internal/admission ./cmd/gar-gate
+	go test -race ./internal/admission ./internal/acceptance/g02 ./cmd/gar-gate ./cmd/gar-g02-verify
 
 paper-guard-verify:
 	mkdir -p "$(CURDIR)/.cache/gradle"
