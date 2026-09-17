@@ -21,7 +21,7 @@ combined.
 > **Current release boundary:** one exact Paper/itzg tuple has locally verified
 > read-only interoperability and admission-barrier evidence. Live plugin
 > mutation remains programmatically disabled. `compatibility.lock` keeps G-02
-> at `FAIL`: a real in-flight Minecraft login-close probe now passes, but the
+> at `FAIL`: real IPv4 and IPv6 in-flight Minecraft login-close probes now pass, but the
 > prepared host-reboot checkpoint still needs a real reboot and post-boot
 > verification. This is not production or beta readiness.
 
@@ -195,6 +195,9 @@ The local run verified:
 - IPv4 and IPv6 loopback closed/open behavior;
 - a maximum 30-second lease plus runtime-guard acknowledgment;
 - active TCP connection termination on close;
+- real Paper Login Start closure on every enrolled IPv4 and IPv6 binding, with
+  the ignored acceptance artifact SHA-256 and live enrollment identity bound in
+  `compatibility.lock` to the committed verifier source;
 - gate and Paper container restart defaulting closed;
 - Docker topology, binding, namespace, rootfs, capability, and mount checks.
 - gate binary digest, fixed command, and evidence-mount attribution.
@@ -207,7 +210,7 @@ filesystem, plugin, or configuration tuple is supported.
 | Gate | Status | What the status means |
 |---|---|---|
 | G-01 | `PASS` | Exact tuple has reproducible local read-only startup evidence |
-| G-02 | `FAIL` | Real Minecraft Login Start is terminated fail-closed with zero players; host-reboot verification is still pending |
+| G-02 | `FAIL` | Real IPv4 and IPv6 Minecraft Login Start connections are terminated fail-closed with zero players; host-reboot verification is still pending |
 | G-03 | `NOT_RUN` | No backup-ready graceful-stop oracle or offline backup engine |
 | G-04 | `FAIL` | Runtime artifact source attribution remains unavailable |
 | G-05 | `NOT_RUN` | No verified real plugin A-to-B transition |

@@ -108,17 +108,23 @@ go run ./cmd/gar-g02-verify host-reboot-prepare \
   --config /absolute/owner-only/g02-directory/config.json
 ```
 
-The first command discovers the exact Paper protocol through the gate, sends
-a real Login Start, closes admission, requires the in-flight connection to be
-terminated, and requires a fresh runtime snapshot with zero players. The
-second command records the current kernel boot ID and closed endpoint. It does
-not reboot the host. After an explicitly authorized real reboot, run:
+The first command requires a fresh owner-controlled host observation whose
+container, generation, gate identity, and complete published-binding set match
+the enrollment. It then discovers the exact Paper protocol through every
+configured IPv4 and IPv6 gate binding, sends a real Login Start on each one,
+closes admission, requires every in-flight connection to terminate, and
+requires a fresh zero-player `MAINTENANCE` runtime snapshot. The second command
+records the current kernel boot ID only after the same live topology and closed
+gate checks pass. It does not reboot the host. After an explicitly authorized
+real reboot, run:
 
 ```bash
 go run ./cmd/gar-g02-verify host-reboot-verify \
   --config /absolute/owner-only/g02-directory/config.json
 ```
 
-Only a changed kernel boot ID plus a still-closed endpoint can produce
-`HOST_RECOVERY` PASS evidence. Unit tests or a container restart cannot replace
-this host-reboot observation.
+Only a changed kernel boot ID plus post-checkpoint host and Paper observations,
+the exact enrolled gate topology, and an immediate gate-driven close on every
+published binding can produce `HOST_RECOVERY` PASS evidence. Connection refusal,
+timeout, a stale snapshot, or a container restart cannot replace this real
+host-reboot observation.
