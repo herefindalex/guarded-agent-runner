@@ -8,6 +8,10 @@ from typing import Any
 class FakeInfrastructure:
     def __init__(self, delays: dict[str, float] | None = None) -> None:
         self.services: dict[str, dict[str, Any]] = {
+            "service-a": {
+                "status": "unhealthy",
+                "logs": ["service-a health check failed in deterministic demo mode"],
+            },
             "nginx": {
                 "status": "stopped",
                 "logs": ["2026-09-12 nginx failed to bind port"],

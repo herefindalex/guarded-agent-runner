@@ -13,7 +13,9 @@ flowchart LR
     Decision -->|Privileged| Approval[Exact human approval]
     Approval --> Revalidation[Resume-time revalidation]
     Revalidation --> Executor
-    Executor --> Infrastructure[Fake infrastructure]
+    Executor --> Adapter[Fixed sandbox adapter]
+    Adapter --> Supervisor[Service A supervisor]
+    Supervisor --> Process[Managed child process]
     Executor --> Verify[Independent outcome verification]
     Skip --> Verify
     Verify --> Audit[(SQLite run and audit store)]
@@ -24,4 +26,4 @@ flowchart LR
     classDef data fill:#e8edf3,stroke:#4e6478,color:#22313f;
     class Planner untrusted;
     class Scope,Policy,Decision,Approval,Revalidation,Executor,Verify guard;
-    class Infrastructure,Audit data;
+    class Adapter,Supervisor,Process,Audit data;

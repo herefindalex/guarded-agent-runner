@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 
 type Action = {
   id: string;
@@ -18,6 +18,7 @@ type Approval = {
   scope_hash: string;
   status: string;
   expires_at: string;
+  precondition?: Record<string, unknown>;
 };
 
 type Run = {
@@ -51,13 +52,23 @@ type AuditEvent = {
   timestamp: string;
 };
 
-const terminal = new Set(['COMPLETED', 'FAILED', 'EXPIRED', 'REJECTED', 'CANCELLED']);
+type SandboxSnapshot = {
+  service: 'service-a';
+  status: string;
+  pid: number | null;
+  generation: number;
+  observed_at: string;
+  lines: string[];
+};
+
+const terminal = new Set(['COMPLETED', 'FAILED', 'STALE', 'EXPIRED', 'REJECTED', 'CANCELLED']);
 
 type Workflow = 'status_only' | 'logs_only' | 'status_and_logs' | 'diagnose_and_restart';
-type ServiceName = 'nginx' | 'postgresql' | 'mysql' | 'redis';
+type ServiceName = 'service-a' | 'nginx' | 'postgresql' | 'mysql' | 'redis';
 type PlannerStage = 'idle' | 'submitting' | 'compiled';
 
 const services: Array<{ value: ServiceName; label: string }> = [
+  { value: 'service-a', label: 'Service A · real sandbox · approval required' },
   { value: 'nginx', label: 'NGINX · restart auto-authorized' },
   { value: 'postgresql', label: 'PostgreSQL · approval if restart needed' },
   { value: 'mysql', label: 'MySQL · approval if restart needed' },
@@ -88,6 +99,7 @@ const workflows: Array<{ value: Workflow; label: string; description: string }> 
 ];
 
 const serviceNames: Record<ServiceName, string> = {
+  'service-a': 'Service A',
   nginx: 'NGINX',
   postgresql: 'PostgreSQL',
   mysql: 'MySQL',
@@ -166,6 +178,13 @@ function runOutcome(run: Run): { tone: string; title: string; detail: string } |
       detail: 'Resume will revalidate the exact action and scope before touching infrastructure.',
     };
   }
+  if (run.status === 'STALE') {
+    return {
+      tone: 'stale',
+      title: 'Stale approval · no restart executed',
+      detail: 'The live service state changed while approval was pending. Create a new run from current evidence.',
+    };
+  }
   if (run.status === 'COMPLETED' && remediation?.status === 'SKIPPED') {
     return {
       tone: 'healthy',
@@ -193,12 +212,14 @@ function runOutcome(run: Run): { tone: string; title: string; detail: string } |
 function App() {
   const [userId, setUserId] = useState('alex');
   const [workflow, setWorkflow] = useState<Workflow>('diagnose_and_restart');
-  const [targetService, setTargetService] = useState<ServiceName>('nginx');
-  const [operatorRequest, setOperatorRequest] = useState(() => requestTemplate('diagnose_and_restart', 'nginx'));
+  const [targetService, setTargetService] = useState<ServiceName>('service-a');
+  const [operatorRequest, setOperatorRequest] = useState(() => requestTemplate('diagnose_and_restart', 'service-a'));
   const [showReadonlyNotice, setShowReadonlyNotice] = useState(false);
   const [plannerStage, setPlannerStage] = useState<PlannerStage>('idle');
   const [run, setRun] = useState<Run | null>(null);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
+  const [sandbox, setSandbox] = useState<SandboxSnapshot | null>(null);
+  const [sandboxError, setSandboxError] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -210,6 +231,12 @@ function App() {
       : `Diagnose first; if ${serviceNames[targetService]} needs a restart, pause for human approval.`
     : selectedWorkflow.description;
   const outcome = run ? runOutcome(run) : null;
+  const statusObservations = run?.plan
+    .filter((action) => action.action === 'service_status')
+    .map((action) => resultObject(action))
+    .filter((result): result is Record<string, unknown> => result !== null) ?? [];
+  const beforeObservation = statusObservations.at(0);
+  const afterObservation = statusObservations.length > 1 ? statusObservations.at(-1) : null;
   const primaryLabel = useMemo(() => {
     if (!run) return 'Create guarded run';
     if (run.status === 'APPROVED') return 'Resume with revalidation';
@@ -218,6 +245,33 @@ function App() {
 
   async function refreshAudit(runId: string) {
     setAudit(await api<AuditEvent[]>(`/runs/${runId}/audit`));
+  }
+
+  async function refreshSandbox() {
+    try {
+      setSandbox(await api<SandboxSnapshot>('/sandbox?lines=100'));
+      setSandboxError('');
+    } catch (caught) {
+      setSandboxError(caught instanceof Error ? caught.message : 'Sandbox unavailable');
+    }
+  }
+
+  useEffect(() => {
+    void refreshSandbox();
+    const timer = window.setInterval(() => void refreshSandbox(), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  async function resetSandbox() {
+    await perform(async () => {
+      await api('/sandbox/reset', { method: 'POST' });
+      setRun(null);
+      setAudit([]);
+      setPlannerStage('idle');
+      setTargetService('service-a');
+      setOperatorRequest(requestTemplate('diagnose_and_restart', 'service-a'));
+      await refreshSandbox();
+    });
   }
 
   async function create(event: FormEvent) {
@@ -397,8 +451,28 @@ function App() {
           </> : <p className="empty">The deterministic planner will produce the selected typed action plan.</p>}
         </section>
 
+        <section className="panel sandbox-panel">
+          <div className="panel-heading"><span>04</span><h3>Live sandbox execution</h3><small>1S REFRESH</small></div>
+          {sandbox ? <>
+            <div className="sandbox-current">
+              <div><small>LIVE STATE</small><strong className={sandbox.status}>{sandbox.status.toUpperCase()}</strong></div>
+              <div><small>PID</small><code>{sandbox.pid ?? '—'}</code></div>
+              <div><small>GENERATION</small><code>{sandbox.generation}</code></div>
+            </div>
+            {(beforeObservation || afterObservation) && <div className="sandbox-comparison">
+              <div><small>RUN OBSERVED</small><strong>{String(beforeObservation?.status ?? '—').toUpperCase()}</strong><span>PID {String(beforeObservation?.pid ?? '—')} · GEN {String(beforeObservation?.generation ?? '—')}</span></div>
+              <div><small>LATEST VERIFIED</small><strong>{String(afterObservation?.status ?? 'pending').toUpperCase()}</strong><span>PID {String(afterObservation?.pid ?? '—')} · GEN {String(afterObservation?.generation ?? '—')}</span></div>
+            </div>}
+            <div className="sandbox-log" role="log" aria-live="polite">
+              {sandbox.lines.length ? sandbox.lines.map((line, index) => <code key={`${index}-${line}`}>{line}</code>) : <code>No sandbox log entries.</code>}
+            </div>
+            <button className="sandbox-reset" onClick={resetSandbox} disabled={busy}>Reset sandbox to unhealthy</button>
+          </> : <p className="empty">Connecting to the fixed service-a sandbox…</p>}
+          {sandboxError && <p className="error">{sandboxError}</p>}
+        </section>
+
         <section className={`panel approval-panel ${approval ? 'active' : ''}`}>
-          <div className="panel-heading"><span>04</span><h3>Human approval</h3></div>
+          <div className="panel-heading"><span>05</span><h3>Human approval</h3></div>
           {approval ? <>
             <div className="risk">HIGH RISK ACTION</div>
             <h4>{approval.action}</h4>
@@ -408,14 +482,14 @@ function App() {
               <strong>Expected impact</strong>
               <p>Restart only <code>service:{approval.resource}</code>, then perform a read-only status check to verify recovery.</p>
             </div>
-            <dl><div><dt>Resource</dt><dd>{approval.resource}</dd></div><div><dt>Arguments</dt><dd>{JSON.stringify(approval.args)}</dd></div><div><dt>Expires</dt><dd>{new Date(approval.expires_at).toLocaleTimeString()}</dd></div></dl>
+            <dl><div><dt>Resource</dt><dd>{approval.resource}</dd></div><div><dt>Arguments</dt><dd>{JSON.stringify(approval.args)}</dd></div><div><dt>Precondition</dt><dd>{JSON.stringify(approval.precondition ?? {})}</dd></div><div><dt>Expires</dt><dd>{new Date(approval.expires_at).toLocaleTimeString()}</dd></div></dl>
             <p className="binding">Bound to scope <code>{approval.scope_hash.slice(0, 16)}…</code></p>
             <div className="decision"><button className="reject" onClick={() => decide('reject')} disabled={busy}>Reject</button><button className="approve" onClick={() => decide('approve')} disabled={busy}>Approve exact action</button></div>
           </> : <p className="empty">Privileged actions pause here. Approval never triggers execution directly.</p>}
         </section>
 
         <section className="panel audit-panel">
-          <div className="panel-heading"><span>05</span><h3>Append-only audit trail</h3><small>{audit.length} EVENTS</small></div>
+          <div className="panel-heading"><span>06</span><h3>Append-only audit trail</h3><small>{audit.length} EVENTS</small></div>
           {audit.length ? <ol>{audit.map((event) => <li key={event.id}>
             <time>{new Date(event.timestamp).toLocaleTimeString()}</time><i className={event.event_type.includes('FAILED') || event.event_type.includes('DENIED') ? 'bad' : ''} />
             <div><strong>{event.event_type}</strong><p>{event.actor}{event.action ? ` · ${event.action}` : ''}{event.resource ? ` · ${event.resource}` : ''}</p></div>

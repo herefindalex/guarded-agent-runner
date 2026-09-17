@@ -31,6 +31,7 @@ class RunStatus(StrEnum):
     REJECTED = "REJECTED"
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
+    STALE = "STALE"
     EXPIRED = "EXPIRED"
     CANCELLED = "CANCELLED"
 
@@ -44,6 +45,7 @@ class ActionStatus(StrEnum):
     RUNNING = "RUNNING"
     SUCCEEDED = "SUCCEEDED"
     FAILED = "FAILED"
+    STALE = "STALE"
 
 
 class ApprovalStatus(StrEnum):
@@ -66,6 +68,7 @@ class PlanPreset(StrEnum):
 
 
 class ServiceName(StrEnum):
+    SERVICE_A = "service-a"
     NGINX = "nginx"
     POSTGRESQL = "postgresql"
     MYSQL = "mysql"
@@ -93,6 +96,7 @@ class AuditEventType(StrEnum):
     APPROVAL_GRANTED = "APPROVAL_GRANTED"
     APPROVAL_REJECTED = "APPROVAL_REJECTED"
     RESUME_REVALIDATION_STARTED = "RESUME_REVALIDATION_STARTED"
+    RESUME_REVALIDATION_SUCCEEDED = "RESUME_REVALIDATION_SUCCEEDED"
     RESUME_REVALIDATION_FAILED = "RESUME_REVALIDATION_FAILED"
     TOOL_EXECUTION_STARTED = "TOOL_EXECUTION_STARTED"
     TOOL_EXECUTION_SUCCEEDED = "TOOL_EXECUTION_SUCCEEDED"
@@ -195,6 +199,7 @@ class ApprovalRequest(BaseModel):
     args: dict[str, Any]
     resource: str
     scope_hash: str
+    precondition: dict[str, Any] | None = None
     status: ApprovalStatus = ApprovalStatus.PENDING
     created_at: datetime = Field(default_factory=utcnow)
     expires_at: datetime
@@ -208,6 +213,7 @@ class ApprovalRequest(BaseModel):
             "args": self.args,
             "resource": self.resource,
             "scope_hash": self.scope_hash,
+            "precondition": self.precondition,
             "expires_at": self.expires_at.isoformat(),
         }
 

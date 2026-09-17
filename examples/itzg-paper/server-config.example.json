@@ -1,0 +1,42 @@
+{
+  "schema_version": "gar.server-config.v1",
+  "enrollment": {
+    "target_id": "paper-reference-read-only",
+    "enrollment_id": "REPLACE_AFTER_OWNER_ENROLLMENT",
+    "deployment_generation": 1,
+    "container_id": "REPLACE_WITH_FULL_CONTAINER_ID",
+    "image_digest": "sha256:46919d151d39e89993c40fa3cedddd200b1bbb4aa44217e17a638c047817b9f4",
+    "data_root_identity": "REPLACE_WITH_DEVICE_AND_INODE",
+    "game_endpoint": "NOT_PUBLISHED",
+    "runtime_guard_pairing": "gar-reference-pairing-2026-09",
+    "bootstrap_fingerprint": "REPLACE_AFTER_COMPOSE_INSPECTION",
+    "policy_id": "read-only-alpha",
+    "policy_revision": "1",
+    "policy_digest": "REPLACE_AFTER_OWNER_POLICY_FREEZE",
+    "support_profile_id": "gar-v0.1-m2-paper-read-only",
+    "paper_tuple": "paper-26.2-build.124/java-25/itzg-image-sha256-46919d151d39",
+    "allowed_plugins": []
+  },
+  "artifacts": {},
+  "profiles": {},
+  "support_profile": {
+    "profile_id": "gar-v0.1-m2-paper-read-only",
+    "mode": "READ_ONLY",
+    "gates": {
+      "G-01": "NOT_RUN",
+      "G-02": "NOT_RUN",
+      "G-03": "NOT_RUN",
+      "G-04": "NOT_RUN",
+      "G-05": "NOT_RUN",
+      "G-06": "NOT_RUN",
+      "G-07": "NOT_RUN"
+    }
+  },
+  "current_revocation_epoch": 1,
+  "paper_runtime": {
+    "snapshot_path": "/REPLACE/ABSOLUTE/PATH/examples/itzg-paper/data/plugins/GARGuard/runtime-observation.json"
+  },
+  "host_observation": {
+    "snapshot_path": "/REPLACE/ABSOLUTE/PATH/examples/itzg-paper/evidence/observation/host-observation.json"
+  }
+}

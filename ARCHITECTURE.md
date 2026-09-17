@@ -1,5 +1,64 @@
 # Guarded Agent Runner Architecture
 
+## GAR-PCS-001 migration boundary
+
+The M2 read-only implementation adds a stateless, authenticated official-SDK MCP
+boundary without adding mutation authority. Every request
+maps a bearer digest to a stored immutable session scope before reaching the
+fixed ten-tool server; approval remains exclusively owner-local.
+
+GARGuard now provides the runtime half of the read-only adapter through a
+bounded, atomically published snapshot. The Go reader verifies the fixed
+pairing, schema, timestamp, bounds, duplicate fields, and symlink-free path.
+The separately privileged `gar-host` process observes one owner-enrolled full
+container ID through a fixed Docker Unix socket and fixed data root. It emits a
+bounded atomic host snapshot outside that data root. The MCP frontend receives
+only the host and Paper snapshots, never the Docker socket. A composite reader
+requires matching identities, fresh paired Paper readiness, bounded observation
+skew, and attributed plugin hashes before it can produce proposal evidence.
+Backup and mutation facts remain unavailable.
+
+The admission profile adds two cooperating fail-closed controls without adding
+mutation authority. `gar-gate` owns the host's IPv4/IPv6 loopback port 25565 in
+Paper's network namespace and proxies only to Paper's unexposed port 25566.
+Its owner-local open lease is capped at 30 seconds and is effective only after
+GARGuard publishes a fresh matching `OPEN_READ_ONLY_ALPHA` acknowledgment.
+GARGuard independently rejects pre-login while the lease is closed or invalid.
+The host observer verifies the gate container and image, shared network
+namespace, exact bindings, read-only rootfs, dropped capabilities, restart
+policy, `no-new-privileges`, lack of Docker socket access, the enrolled gate
+binary digest, fixed command, and read-only evidence mounts. Closing the lease drops existing
+proxied connections; process or container restart never recreates an open
+lease.
+
+The authoritative product direction is now Guarded Plugin Change & Recovery for Paper. The Go M1 core under `internal/` implements immutable authority, frozen intents, owner-local approval, durable writer ownership, UNKNOWN blocking, and shadow revalidation against a fake target. `compatibility.lock` records one exact `LOCAL_PAPER_READ_ONLY` tuple while G-02 and G-04 fail closed; it does not authorize live mutation.
+
+The Python/FastAPI architecture documented below predates GAR-PCS-001. It remains a legacy service-sandbox demonstration and regression fixture; its web approval, generic service names, and restart action are not the Paper v0.1 agent or operator contract. The two evidence sets must not be combined.
+
+```text
+GAR v0.1 M1 + M2 read-only components
+
+Agent -> loopback MCP + Origin + bearer -> stored immutable session scope
+                                                   |
+                                      fixed ten-tool contract
+                                                   |
+Agent proposal ---------------------------> frozen ChangeIntent -> SQLite journal
+                                                                  |
+Owner garctl -> exact ID + digest approval -----------------------+
+                                                                  |
+                                                       operation ownership
+                                                                  |
+                                                SHADOW_ONLY; live mutation blocked
+
+Owner gar-gate open/close -> bounded lease -> GARGuard acknowledgment
+                                            -> gate:25565 -> Paper:25566
+gar-host -> validates Paper + gate topology -> bounded host snapshot
+```
+
+See [GAR v0.1 implementation status](docs/GAR_V01_IMPLEMENTATION.md) for the invariant and acceptance mapping.
+
+## Legacy service-sandbox architecture
+
 Guarded Agent Runner separates proposal generation from authorization and execution. The design assumes request text and planner output may be malicious. It gives those components influence over a typed proposal, but never gives them credentials, approval objects, execution tokens, or a general-purpose execution interface.
 
 ## System goals
@@ -52,7 +111,9 @@ flowchart TB
     Approval --> Revalidation
     Revalidation --> Token
     Token --> Executor
-    Executor --> Fake[Fake infrastructure]
+    Executor --> Adapter[Fixed sandbox adapter]
+    Adapter --> Supervisor[Service A supervisor]
+    Supervisor --> Child[Managed child process]
     State --> Repository
     Approval --> Repository
     Policy --> Audit
@@ -194,9 +255,10 @@ An approval binds these fields:
 - exact arguments;
 - exact resource;
 - current scope hash;
+- the last authoritative service status, PID, and generation when available;
 - expiry time.
 
-The binding hash detects mutation. Approval changes the run to `APPROVED`; it deliberately does not call the executor. A separate resume request rechecks the approval status, expiry, binding, run and action match, resource, scope, current user authorization, and current policy result. Any mismatch emits `RESUME_REVALIDATION_FAILED` and executes nothing.
+The binding hash detects mutation. Approval changes the run to `APPROVED`; it deliberately does not call the executor. A separate resume request rechecks the approval status, expiry, binding, run and action match, resource, scope, current user authorization, and current policy result. It then makes a fresh read-only observation and compares the approved status, PID, and generation. A mismatch transitions the run to terminal `STALE` with `STALE_PRECONDITION` and executes nothing.
 
 ## Run state machine
 
@@ -208,6 +270,7 @@ stateDiagram-v2
     RUNNING --> WAITING_APPROVAL
     WAITING_APPROVAL --> APPROVED
     APPROVED --> RUNNING: resume + revalidation
+    APPROVED --> STALE: live precondition changed
     RUNNING --> COMPLETED
     WAITING_APPROVAL --> REJECTED
     CREATED --> FAILED
@@ -220,7 +283,21 @@ stateDiagram-v2
     APPROVED --> EXPIRED
 ```
 
-`REJECTED`, `COMPLETED`, `FAILED`, `EXPIRED`, and `CANCELLED` are terminal. Undefined transitions raise `InvalidRunTransition`.
+`REJECTED`, `COMPLETED`, `FAILED`, `STALE`, `EXPIRED`, and `CANCELLED` are terminal. Undefined transitions raise `InvalidRunTransition`.
+
+## Fixed Docker sandbox
+
+The Compose demo replaces the in-memory execution target with a real managed process:
+
+```text
+Browser
+  ↓ polling through runner API
+Runner ── typed internal HTTP ──> sandbox-service-a supervisor
+                                      ↓
+                               child health process
+```
+
+The supervisor starts Service A unhealthy, records bounded logs, and exposes only status, logs, restart, and a demo-only reset endpoint on the internal Compose network. Restart terminates the old child, starts a healthy child, increments a generation counter, and returns both PIDs. The runner has no Docker socket and no arbitrary command endpoint. Direct local execution without `SANDBOX_SERVICE_URL` retains `FakeInfrastructure` for deterministic tests and the legacy scenarios.
 
 ## Persistence and audit
 
@@ -244,7 +321,7 @@ SQLite and process-local locks are acceptable for a single-process concept-valid
 - Execution-token cleanup runs in `finally` and is idempotent.
 - Expired runs and approvals cannot resume.
 - Rejected approval is terminal.
-- A malformed execution call never reaches fake infrastructure.
+- A malformed execution call never reaches the infrastructure adapter.
 
 ## Deployment topology
 
@@ -255,10 +332,17 @@ HTTP :8000
    |
 FastAPI process (React static assets + API)
    |
-SQLite volume + in-memory fake infrastructure
+   +-- SQLite volume
+   |
+   +-- typed HTTP on the internal Compose network
+           |
+           v
+       Service A supervisor
+           |
+           +-- managed child health process
 ```
 
-The Docker image uses a Node build stage and a non-root Python 3.12 runtime. GitHub Actions verifies backend, frontend, and container builds. Tagged or manually requested releases publish a container to GHCR; no workflow deploys it to a server.
+The Compose deployment runs the runner and sandbox as separate containers. The runner receives neither the Docker socket nor a general-purpose process interface. Direct local execution without `SANDBOX_SERVICE_URL` uses the in-memory test adapter for deterministic tests and legacy scenarios. The Docker image uses a Node build stage and a non-root Python 3.12 runtime. GitHub Actions verifies backend, frontend, and container builds. Tagged or manually requested releases publish a container to GHCR; no workflow deploys it to a server.
 
 ## Production evolution
 
@@ -269,7 +353,7 @@ Moving beyond concept validation requires deliberate replacements:
 | Deterministic preset planner | LLM gateway with schema-constrained output; keep it outside the trusted computing base |
 | String operator identity | Authenticated identity and RBAC from an identity provider |
 | SHA-256 approval integrity | Signed or MAC-protected approvals with managed rotating keys |
-| Fake infrastructure | Per-action adapters using narrowly scoped, short-lived credentials |
+| Fixed local process sandbox and test fake | Reviewed production per-action adapters using narrowly scoped, short-lived credentials |
 | SQLite audit | Remote append-only audit sink with independent retention and access control |
 | Process-local locks | Database-backed concurrency, idempotency keys, and worker leases |
 | Code-configured policy | Reviewed, versioned policy bundles with controlled rollout |

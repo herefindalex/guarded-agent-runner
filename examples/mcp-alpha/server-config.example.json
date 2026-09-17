@@ -1,0 +1,36 @@
+{
+  "schema_version": "gar.server-config.v1",
+  "enrollment": {
+    "target_id": "replace-with-owner-target-id",
+    "enrollment_id": "replace-with-owner-enrollment-id",
+    "deployment_generation": 1,
+    "container_id": "unobserved",
+    "image_digest": "unobserved",
+    "data_root_identity": "unobserved",
+    "game_endpoint": "unobserved",
+    "runtime_guard_pairing": "unobserved",
+    "bootstrap_fingerprint": "unobserved",
+    "policy_id": "read-only-alpha",
+    "policy_revision": "1",
+    "policy_digest": "not-yet-evidenced",
+    "support_profile_id": "gar-v0.1-m2-transport-only",
+    "paper_tuple": "NOT_TESTED",
+    "allowed_plugins": []
+  },
+  "artifacts": {},
+  "profiles": {},
+  "support_profile": {
+    "profile_id": "gar-v0.1-m2-transport-only",
+    "mode": "READ_ONLY",
+    "gates": {
+      "G-01": "NOT_RUN",
+      "G-02": "NOT_RUN",
+      "G-03": "NOT_RUN",
+      "G-04": "NOT_RUN",
+      "G-05": "NOT_RUN",
+      "G-06": "NOT_RUN",
+      "G-07": "NOT_RUN"
+    }
+  },
+  "current_revocation_epoch": 1
+}

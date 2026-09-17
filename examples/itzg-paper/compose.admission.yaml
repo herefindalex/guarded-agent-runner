@@ -1,0 +1,44 @@
+services:
+  paper:
+    environment:
+      # Paper is never published directly. The gate owns 25565 while Paper
+      # listens on a different port in the shared network namespace.
+      SERVER_PORT: "25566"
+    ports:
+      - "127.0.0.1:25565:25565/tcp"
+      - "[::1]:25565:25565/tcp"
+    volumes:
+      - ./guard-config.admission.yml:/data/plugins/GARGuard/config.yml:ro
+      - ./evidence/admission:/gar-admission:ro
+
+  admission-gate:
+    image: itzg/minecraft-server:java25@sha256:46919d151d39e89993c40fa3cedddd200b1bbb4aa44217e17a638c047817b9f4
+    network_mode: service:paper
+    depends_on:
+      paper:
+        condition: service_healthy
+    restart: "no"
+    user: "1000:1000"
+    read_only: true
+    entrypoint: ["/gar-gate"]
+    command:
+      - serve
+      - --config
+      - ${GAR_ADMISSION_CONFIG:?Set GAR_ADMISSION_CONFIG to the absolute owner-only config path}
+    # The base image healthcheck probes Minecraft directly and would bypass
+    # the semantic distinction between an intentionally closed gate and a
+    # failed gate process.
+    healthcheck:
+      disable: true
+    volumes:
+      - ./evidence/gar-gate:/gar-gate:ro
+      # Mount the directory rather than one file: state updates use atomic rename.
+      - ./evidence/admission:${GAR_ADMISSION_DIRECTORY:?Set GAR_ADMISSION_DIRECTORY to the same absolute evidence/admission path}:ro
+      - ./data/plugins/GARGuard:${GAR_PAPER_RUNTIME_DIRECTORY:?Set GAR_PAPER_RUNTIME_DIRECTORY to the same absolute data/plugins/GARGuard path}:ro
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+      - /data:rw,noexec,nosuid,nodev,size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

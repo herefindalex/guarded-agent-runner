@@ -27,6 +27,7 @@ async def test_audit_events_are_complete_and_ordered(service):
         AuditEventType.APPROVAL_REQUESTED,
         AuditEventType.APPROVAL_GRANTED,
         AuditEventType.RESUME_REVALIDATION_STARTED,
+        AuditEventType.RESUME_REVALIDATION_SUCCEEDED,
         AuditEventType.TOOL_EXECUTION_STARTED,
         AuditEventType.TOOL_EXECUTION_SUCCEEDED,
         AuditEventType.TOOL_REQUESTED,

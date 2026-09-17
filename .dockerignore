@@ -15,5 +15,7 @@ __pycache__
 .pytest_cache
 frontend/node_modules
 frontend/dist
+plugins/paper-guard/.gradle
+plugins/paper-guard/build
 tests
 diagrams

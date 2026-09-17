@@ -1,12 +1,42 @@
 services:
+  sandbox-service-a:
+    image: guarded-agent-runner:local
+    command:
+      - uvicorn
+      - guarded_agent_runner.sandbox.service:create_app
+      - --factory
+      - --host
+      - 0.0.0.0
+      - --port
+      - "9000"
+    expose:
+      - "9000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:9000/status')
+      interval: 2s
+      timeout: 1s
+      retries: 15
+
   runner:
     build: .
+    image: guarded-agent-runner:local
+    depends_on:
+      sandbox-service-a:
+        condition: service_healthy
     ports:
       - "8000:8000"
     volumes:
       - runner-data:/data
     environment:
       DATABASE_URL: sqlite:////data/guarded_agent_runner.db
+      DEMO_MODE: "true"
+      SANDBOX_SERVICE_URL: http://sandbox-service-a:9000
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 10s
@@ -15,4 +45,3 @@ services:
 
 volumes:
   runner-data:
-

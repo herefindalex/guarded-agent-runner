@@ -16,12 +16,21 @@ from guarded_agent_runner.policy.policy_engine import PolicyEngine
 def create_approval(run: Run, call: ToolCall, ttl_seconds: float) -> ApprovalRequest:
     if call.resource is None:
         raise ValueError("Approval resource is missing")
+    precondition = next(
+        (
+            previous.result.copy()
+            for previous in reversed(run.plan[: run.current_step])
+            if previous.action == "service_status" and isinstance(previous.result, dict)
+        ),
+        None,
+    )
     draft = ApprovalRequest(
         run_id=run.id,
         action=call.action,
         args=call.args.copy(),
         resource=call.resource,
         scope_hash=run.scope.hash,
+        precondition=precondition,
         expires_at=utcnow() + timedelta(seconds=ttl_seconds),
         binding_hash="",
     )
