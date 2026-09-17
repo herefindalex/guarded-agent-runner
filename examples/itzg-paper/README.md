@@ -4,7 +4,8 @@ This is the disposable fixture used for the repository's exact
 `LOCAL_PAPER_READ_ONLY` evidence. It pins the inspected multi-platform itzg
 `java25` image digest and Paper 26.2 build 124. The observed tuple is recorded
 in `compatibility.lock`: G-01 passes for reproducible read-only startup, G-02
-and G-04 fail closed, and the remaining mutation gates are `NOT_RUN`.
+passes the enrolled owner-assisted host-recovery checks, G-04 fails closed,
+and the remaining mutation gates are `NOT_RUN`.
 
 This evidence proves only the listed local read-only interoperability. It does
 not establish mutation compatibility, backup/recovery correctness, a verified
@@ -89,8 +90,12 @@ dropped capabilities, restart policy, and absence of a Docker socket mount.
 The profile locally passed IPv4/IPv6 closed/open checks, bounded lease and
 runtime acknowledgment, active TCP connection drop on close, gate/Paper
 restart-to-closed checks, and a real Paper protocol Login Start connection
-terminated on close with zero players. Host-reboot verification remains
-pending, so G-02 must remain `FAIL` until that complete path is demonstrated.
+terminated on close with zero players. The existing host reboot subsequently
+passed verification after explicitly starting the same fixture containers.
+G-02 is PASS for that evidence; it does not demonstrate unattended startup.
+No further reboot of the owner's workstation is authorized. The recovered
+guard build digest is recorded separately in the lock because the required
+Java build regenerated the JAR; the original artifact registry is unchanged.
 
 ## G-02 acceptance harness
 

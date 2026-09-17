@@ -39,15 +39,24 @@ and read-only mirrored config/state/runtime mounts.
 The Paper product direction currently includes the M1 fake-target Go core and M2 read-only components. The agent catalog has ten read/propose/query tools and no approval tool. Approval, rejection, and revocation are owner-local `garctl` operations bound to the exact full intent digest. The SQLite journal requires a regular owner-only non-symlink file and reads back WAL/FULL settings; it rejects unsafe permissions instead of silently changing them.
 
 Live Paper mutation is not available. `compatibility.lock` records one exact
-`LOCAL_PAPER_READ_ONLY` tuple and G-01 now passes for that fixture, but G-02
-remains failed because host-reboot and real in-flight Minecraft login behavior
-have not been verified. The leased TCP gate, Paper pre-login guard, and Docker
-binding observer are implemented and locally exercised, but those partial
-results cannot promote the gate. G-04 fails because runtime source attribution
+`LOCAL_PAPER_READ_ONLY` tuple with G-01 PASS, plus G-02 HOST_RECOVERY PASS.
+The existing host reboot was verified after explicitly starting only the
+original enrolled fixture containers, with admission still CLOSED. Fresh
+MAINTENANCE, zero-player, exact-topology and IPv4/IPv6 gate-close observations
+passed. No further workstation reboot is authorized. The rebuilt guard artifact
+digest is recorded separately from the historical G-01 artifact; this does not
+prove artifact attribution or unattended startup. G-04 fails because runtime source attribution
 is unavailable. G-03/G-05/G-06/G-07 remain `NOT_RUN`, and the mutation entry point returns
 `UNSUPPORTED_ENVIRONMENT` even when a test constructs synthetic PASS gates.
-Backup, artifact replacement, recovery, and independent-admin onboarding
-remain later milestones.
+The offline backup foundation has UNIT/FAKE_TARGET coverage and does not expose
+a live dispatch route. Stop confirmation requires independently observed lifecycle
+and terminal runtime evidence with operation/step attribution. Possible dispatch
+with unknown outcome retains writer ownership and blocks forward execution.
+Backup partials and orphan archives remain invalid; VALID metadata and S05
+completion commit atomically only after fsync, finalization and digest reread.
+Source/destination paths come from owner configuration, never an agent request.
+S06–S10 preparation is explicitly disabled. Real stop/backup acceptance, artifact
+replacement, recovery, and independent-admin onboarding remain later milestones.
 
 The FastAPI/React approval UI described below is legacy service-sandbox code. It is not an operator approval channel for GAR-PCS-001 and must not be exposed to an agent as proof of the Paper security model.
 

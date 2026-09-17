@@ -20,10 +20,13 @@ combined.
 
 > **Current release boundary:** one exact Paper/itzg tuple has locally verified
 > read-only interoperability and admission-barrier evidence. Live plugin
-> mutation remains programmatically disabled. `compatibility.lock` keeps G-02
-> at `FAIL`: real IPv4 and IPv6 in-flight Minecraft login-close probes now pass, but the
-> prepared host-reboot checkpoint still needs a real reboot and post-boot
-> verification. This is not production or beta readiness.
+> mutation remains programmatically disabled. `compatibility.lock` records G-02
+> `PASS`: real IPv4/IPv6 in-flight login-close and post-reboot fail-closed checks
+> passed for the enrolled fixture. Recovery used explicit startup of the existing
+> containers; the separate recovered GARGuard build digest is recorded in the lock.
+> No further workstation reboot is authorized. G-03 has
+> an S00–S05 foundation with UNIT/FAKE_TARGET tests; real G-03 acceptance is
+> still NOT_RUN. This is not production or beta readiness.
 
 ## Why GAR exists
 
@@ -74,7 +77,7 @@ The MCP server exposes exactly ten agent-facing tools:
 | `get_recent_errors` | Return a bounded page of recent error evidence | Read only |
 | `list_plugins` | Return the attributed plugin inventory | Read only |
 | `get_recent_changes` | Return principal- and enrollment-scoped intent history | Read only |
-| `get_backup_status` | Report backup evidence as unavailable until the offline backup engine exists | Read only |
+| `get_backup_status` | Report live backup evidence unavailable; the S05 foundation is not connected to MCP | Read only |
 | `propose_plugin_change` | Compile registered plugin and artifact IDs into an immutable `ChangeIntent` | Proposal only; no dispatch |
 | `get_operation` | Return the caller's own intent, operation, or step record | Read only |
 
@@ -93,9 +96,10 @@ go run ./cmd/garctl intent revoke --db /path/to/gar.db \
 ```
 
 Approval changes durable state only. It does not execute a mutation. The fixed
-S00-S10 change workflow is present in the immutable intent and journal, but the
-host mutation controller, offline backup engine, artifact replacement, and
-recovery executor do not exist yet. `StartMutation` therefore returns
+S00-S10 change workflow is present in the immutable intent and journal. The
+S00–S05 coordinator and offline archive engine now have UNIT/FAKE_TARGET
+coverage. The live host mutation controller, artifact replacement, and recovery
+executor remain absent. `StartMutation` therefore returns
 `UNSUPPORTED_ENVIRONMENT` even if synthetic tests construct passing gates.
 
 ## Paper evidence architecture
@@ -210,8 +214,8 @@ filesystem, plugin, or configuration tuple is supported.
 | Gate | Status | What the status means |
 |---|---|---|
 | G-01 | `PASS` | Exact tuple has reproducible local read-only startup evidence |
-| G-02 | `FAIL` | Real IPv4 and IPv6 Minecraft Login Start connections are terminated fail-closed with zero players; host-reboot verification is still pending |
-| G-03 | `NOT_RUN` | No backup-ready graceful-stop oracle or offline backup engine |
+| G-02 | `PASS` | Changed kernel boot ID and fresh post-reboot CLOSED/MAINTENANCE, zero-player, exact-topology and dual-stack fail-closed evidence; explicit recovery of existing fixture containers |
+| G-03 | `NOT_RUN` | Stop/backup safety contract, durable S00–S05 coordinator and offline archive engine pass UNIT/FAKE_TARGET tests; live adapter and real approved-target evidence remain unavailable |
 | G-04 | `FAIL` | Runtime artifact source attribution remains unavailable |
 | G-05 | `NOT_RUN` | No verified real plugin A-to-B transition |
 | G-06 | `NOT_RUN` | No crash-recovery and ambiguous-outcome campaign |
@@ -394,7 +398,7 @@ See [Security](docs/SECURITY.md) for the full threat model and limitations.
 - No arbitrary shell, subprocess, SSH, Kubernetes, Terraform, cloud, or
   caller-selected filesystem interface
 - No agent-visible approval or admission-control tool
-- No backup-ready oracle or offline backup engine
+- No live stop/backup execution route; the S00–S05 foundation is library/test-only
 - No runtime artifact source attribution
 - No authenticated multi-user operator UI, RBAC, signed approval, or remote
   immutable audit sink

@@ -15,13 +15,30 @@ This document separates implemented behavior from locally verified evidence and 
 
 ## GAR-PCS-001 M1 core and M2 read-only alpha
 
+G-03 continuation: the S00–S05 coordinator, stop oracle, offline readiness
+contract, bounded archive engine and durable backup metadata now pass
+UNIT/FAKE_TARGET tests, including six crash/reopen boundaries. No live stop
+adapter or execution route is installed. G-03 remains NOT_RUN. G-02 changed
+FAIL → PASS after verification of the existing reboot at 2026-09-17T08:41:43Z.
+The kernel boot ID changed and the original fixture containers recovered with
+fresh CLOSED/MAINTENANCE, zero-player and dual-stack fail-closed observations.
+No additional workstation reboot was performed or is authorized. Current gates:
+G-01 PASS, G-02 PASS, G-03 NOT_RUN, G-04 FAIL, G-05/G-06/G-07 NOT_RUN.
+
+The current baseline commit `744922f8ba87f6e51b4130f50a62785c0e4fd70c` has
+successful hosted [CI](https://github.com/herefindalex/guarded-agent-runner/actions/runs/35190266318)
+and [Secret scan](https://github.com/herefindalex/guarded-agent-runner/actions/runs/35190266263).
+The G-03 continuation has local verification. Hosted results must be checked
+for the exact published commit; baseline results alone do not validate later
+changes, and CI cannot establish real Paper G-03 acceptance.
+
 | Check | Result |
 |---|---|
 | Go domain/store/workflow/MCP tests | PASS, including race detector |
 | `go vet ./...` | PASS |
 | Agent tool count | PASS, exactly 10 and no approval tool |
 | Fake-target mutation dispatch | PASS, zero; mutation entry point returns `UNSUPPORTED_ENVIRONMENT` |
-| `compatibility.lock` | One exact `LOCAL_PAPER_READ_ONLY` tuple; G-01 `PASS`, G-02/G-04 `FAIL`, G-03/G-05/G-06/G-07 `NOT_RUN`; mutation disabled |
+| `compatibility.lock` | Historical `LOCAL_PAPER_READ_ONLY` tuple plus G-02 `HOST_RECOVERY` evidence; G-01/G-02 `PASS`, G-04 `FAIL`, G-03/G-05/G-06/G-07 `NOT_RUN`; mutation disabled |
 | MCP Streamable HTTP transport | `LOCAL_VERIFIED`; official SDK client plus real authenticated loopback MCP against the isolated Paper fixture |
 | Paper guard and runtime snapshot adapter | `LOCAL_VERIFIED`; Paper 26.2 build 124 loaded GARGuard 0.1.0 and published fresh bounded snapshots across a normal restart |
 | Paper admission guard | `LOCAL_VERIFIED`; maintenance rejects pre-login, a fresh matching lease reports `OPEN_READ_ONLY_ALPHA`, and missing/stale/cross-generation state fails closed |
@@ -29,7 +46,7 @@ This document separates implemented behavior from locally verified evidence and 
 | Admission TCP gate | `LOCAL_VERIFIED`; IPv4/IPv6 closed/open checks, bounded lease, runtime acknowledgment, in-flight TCP drop, and gate/Paper restart-to-closed behavior passed |
 | Minecraft in-flight login-close | `LOCAL_PAPER`; protocol 776 Login Start remained in flight before close, connection terminated in 13 ms, players stayed zero |
 | Read-only MCP tools | `LOCAL_VERIFIED`; exactly 10 tools, no approval tool, live health/player/performance/plugin/error/change reads; backup honestly unavailable |
-| Host recovery, real plugin transition, mutation beta | Host reboot checkpoint `PREPARED` but not executed; G-02 remains `FAIL`; G-04 source attribution and G-03/G-05/G-06/G-07 remain incomplete |
+| Host recovery, real plugin transition, mutation beta | G-02 `HOST_RECOVERY` PASS after explicit restart of the original fixture containers; rebuilt guard JAR digest recorded separately; G-04 source attribution and G-03/G-05/G-06/G-07 remain incomplete |
 
 Detailed mapping: [GAR v0.1 implementation status](GAR_V01_IMPLEMENTATION.md).
 
@@ -54,8 +71,8 @@ The implementation status below is retained legacy Python service-sandbox eviden
 | React production build | `LOCAL_VERIFIED` | TypeScript and Vite production build pass |
 | Responsive UI | `LOCAL_VERIFIED` | 390px browser check reports no horizontal overflow |
 | Container image | `LOCAL_VERIFIED` | Multi-stage non-root Python 3.12 image built and returned HTTP 200 from `/health` |
-| GitHub CI | `IMPLEMENTED`, `HOSTED_NOT_RUN` | Backend, frontend, and container jobs are defined in `ci.yml` |
-| Secret scanning workflow | `IMPLEMENTED`, `HOSTED_NOT_RUN` | Full-history Gitleaks workflow is defined |
+| GitHub CI | Hosted PASS for baseline `744922f` | CI run 35190266318 succeeded; verify each later commit's hosted run separately |
+| Secret scanning workflow | Hosted PASS for baseline `744922f` | Secret scan run 35190266263 succeeded; verify each later commit's hosted scan separately |
 | GHCR publication | `IMPLEMENTED`, `HOSTED_NOT_RUN` | Tagged/manual publication workflow includes SBOM and provenance |
 
 ## Local validation baseline
@@ -82,7 +99,7 @@ The LAN address is environment-specific and is intentionally not committed as a 
 - The fixed Compose sandbox proves real local child-process replacement, not operating-system or production service control.
 - Legacy direct-run targets still use fake infrastructure for deterministic policy demonstrations.
 - Local browser checks are not a hosted end-to-end environment.
-- The upstream baseline CI and secret scan passed on commit `a04aa36`; the current sandbox changes still require a new hosted run.
+- Branch baseline `744922f` passed hosted CI and Secret scan; each published G-03 commit requires its own hosted checks, independently of the real Paper release gates.
 - GHCR publication remains `HOSTED_NOT_RUN` until a tagged or manual run publishes an image.
 - No production credentials, external infrastructure, LLM, or identity provider were used.
 

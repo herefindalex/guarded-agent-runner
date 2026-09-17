@@ -65,8 +65,15 @@
           "gate_container_restart_defaults_closed": "PASS",
           "paper_container_restart_defaults_closed": "PASS",
           "docker_binding_observer": "PASS",
-          "host_reboot": "NOT_RUN",
-          "host_reboot_checkpoint": "PREPARED",
+          "host_reboot": "PASS",
+          "host_reboot_checkpoint": "PASS",
+          "host_recovery_evidence_level": "HOST_RECOVERY",
+          "pre_reboot_boot_id": "a47de622-856c-45e8-8907-1d395e3244fa",
+          "post_reboot_boot_id": "b87e66b7-3e35-40cd-9233-3c810b4deed4",
+          "host_recovery_verified_at": "2026-09-17T08:41:43.075074519Z",
+          "recovery_mode": "OWNER_STARTED_EXISTING_FIXTURE_CONTAINERS_WITH_RESTART_POLICY_NO",
+          "recovered_guard_jar_sha256": "021372d926a2e9ff703f188db2cd6598766617f3215e10a8acdef74fc9dfadac",
+          "recovered_guard_note": "Rebuilt from unchanged guard source by the required Java verification build. Digest differs from the historical read-only G-01 guard artifact above; artifact registry is unchanged. This is G-02 admission recovery evidence, not G-04 source attribution.",
           "minecraft_inflight_login": "PASS",
           "minecraft_inflight_login_bindings": {
             "127.0.0.1:25565": "PASS",
@@ -74,8 +81,11 @@
           },
           "acceptance_evidence": {
             "schema_version": "gar.g02-acceptance-evidence.v2",
-            "sha256": "d068c27e2930dc34046db7e31d2cd371938bdc8f14877dc7f9b80b002dbf88fa",
-            "source_commit": "ca97ca0274f0ee68e68fca65c8a99f6bfdca390d",
+            "sha256": "6fcaf31080d8caf7446f6b3f8ecce72c6431347e7812e687818ee819fec9bb89",
+            "source_commit": "744922f8ba87f6e51b4130f50a62785c0e4fd70c",
+            "source_worktree_state": "CLEAN_TRACKED_SOURCE_DETACHED_CHECKOUT",
+            "verifier_binary_sha256": "363ade4655526344a1e860e7961fd48536561956fae5b45dbfc39f399fc9a660",
+            "observer_binary_sha256": "6d99d24b21581bef018cbfa99e37b2b41639496fdc70e84dbb54da3d22a5e9ac",
             "enrollment_id": "paper-reference-read-only",
             "deployment_generation": 3,
             "container_id": "2317ce3d869a689a4334503815f61e3d841196647b2511e063291f421066d0eb",
@@ -96,12 +106,12 @@
   "mutation_enabled": false,
   "gates": {
     "G-01": "PASS",
-    "G-02": "FAIL",
+    "G-02": "PASS",
     "G-03": "NOT_RUN",
     "G-04": "FAIL",
     "G-05": "NOT_RUN",
     "G-06": "NOT_RUN",
     "G-07": "NOT_RUN"
   },
-  "reason": "The exact tuple has LOCAL_PAPER read-only evidence only. Mutation remains hard-disabled. G-02 has a fail-closed leased TCP gate, paired Paper login guard, Docker binding observation, and a passing real in-flight Minecraft Login Start close probe, but still fails until host-reboot evidence passes. Runtime source attribution is unavailable (G-04), while stop/backup, real plugin transition, crash recovery, and independent-admin onboarding gates remain incomplete."
+  "reason": "G-01 retains historical exact-tuple read-only evidence. G-02 now has passing real IPv4/IPv6 Login Start close and HOST_RECOVERY evidence from the existing reboot; no additional host reboot was performed for verification. Mutation remains hard-disabled. G-03 has a UNIT/FAKE_TARGET S00-S05 stop/backup foundation but no live stop adapter or real approved-target backup acceptance. Runtime source attribution remains unavailable (G-04). Real plugin transition, ambiguous mutation recovery, and independent-admin onboarding gates remain incomplete."
 }
