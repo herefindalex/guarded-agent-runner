@@ -64,7 +64,7 @@ all ten authenticated MCP read/propose/query tools, the leased IPv4/IPv6 TCP
 gate, Paper runtime acknowledgment, pre-login maintenance state, connection
 drop on close, restart-to-closed behavior, Docker admission topology, and gate
 binary/command/evidence-mount attribution. A real Paper protocol 776 Login
-Start was observed in flight and terminated nine milliseconds after
+Start was observed in flight and terminated 13 milliseconds after
 owner-local close with zero players before and after. The host-reboot
 checkpoint is prepared but has not crossed a real kernel boot, so G-02 remains
 `FAIL`. `HOST_RECOVERY`, real plugin transition, mutation, and `BETA` cases

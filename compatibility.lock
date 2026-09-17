@@ -2,7 +2,7 @@
   "schema_version": "gar.compatibility.v1",
   "specification": "GAR-PCS-001@v0.1-r1",
   "source": {
-    "commit": "adf730d34bf07914243bf839bf0acdbdcf4abe6c",
+    "commit": "a584ba21e55d9f553c3952efbd7a74a5cdb2a2d5",
     "worktree_state": "COMMITTED_SOURCE_WITH_IGNORED_RUNTIME_EVIDENCE",
     "evidence_date": "2026-09-16"
   },
@@ -66,7 +66,7 @@
           "paper_container_restart_defaults_closed": "PASS",
           "docker_binding_observer": "PASS",
           "host_reboot": "NOT_RUN",
-          "minecraft_inflight_login": "NOT_RUN"
+          "minecraft_inflight_login": "PASS"
         },
         "verified_plugin_transitions": [],
         "mutation": "NOT_RUN"
@@ -83,5 +83,5 @@
     "G-06": "NOT_RUN",
     "G-07": "NOT_RUN"
   },
-  "reason": "The exact tuple has LOCAL_PAPER read-only evidence only. Mutation remains hard-disabled. G-02 has a fail-closed leased TCP gate, paired Paper login guard, and Docker binding observation, but still fails until host-reboot and in-flight Minecraft login cases pass. Runtime source attribution is unavailable (G-04), while stop/backup, real plugin transition, crash recovery, and independent-admin onboarding gates remain incomplete."
+  "reason": "The exact tuple has LOCAL_PAPER read-only evidence only. Mutation remains hard-disabled. G-02 has a fail-closed leased TCP gate, paired Paper login guard, Docker binding observation, and a passing real in-flight Minecraft Login Start close probe, but still fails until host-reboot evidence passes. Runtime source attribution is unavailable (G-04), while stop/backup, real plugin transition, crash recovery, and independent-admin onboarding gates remain incomplete."
 }
