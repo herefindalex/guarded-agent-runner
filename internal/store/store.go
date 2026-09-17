@@ -139,6 +139,13 @@ func secureDatabaseFile(path string) error {
 
 func (store *Store) initialize(ctx context.Context) error {
 	statements := []string{
+		`CREATE TABLE IF NOT EXISTS v01_backups (
+            backup_id TEXT PRIMARY KEY,
+            operation_id TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            FOREIGN KEY(operation_id) REFERENCES v01_operations(operation_id)
+        )`,
 		`CREATE TABLE IF NOT EXISTS v01_sessions (
             session_id TEXT PRIMARY KEY,
             principal_id TEXT NOT NULL,
@@ -702,6 +709,9 @@ func (store *Store) OperationForStep(ctx context.Context, stepID string) (domain
 
 // PrepareStep durably records the next step before any executor dispatch (INV-13, AT-049).
 func (store *Store) PrepareStep(ctx context.Context, operationID, stepKind string, now time.Time) (domain.StepAttempt, error) {
+	if stepKind == "S06_REPLACE_ARTIFACT" || stepKind == "S07_PREPARE_LAUNCH_AND_START" || stepKind == "S08_VERIFY_UNDER_MAINTENANCE" || stepKind == "S09_RELEASE_MAINTENANCE" || stepKind == "S10_FINALIZE" {
+		return domain.StepAttempt{}, domain.NewError(domain.ErrUnsupportedEnvironment, "S05 is the current review boundary; S06-S10 remain disabled")
+	}
 	tx, err := store.db.BeginTx(ctx, nil)
 	if err != nil {
 		return domain.StepAttempt{}, err
@@ -726,6 +736,9 @@ func (store *Store) PrepareStep(ctx context.Context, operationID, stepKind strin
 	}
 	if err := intent.Intent.ValidateDigest(); err != nil {
 		return domain.StepAttempt{}, err
+	}
+	if intent.Status != domain.IntentConsumed || operation.OwnershipReleased || domain.IsTerminalOperation(operation.Status) || operation.IntentDigest != intent.Intent.IntentDigest {
+		return domain.StepAttempt{}, domain.NewError(domain.ErrApprovalRevoked, "operation no longer holds an executable approval")
 	}
 	if len(operation.Attempts) >= len(intent.Intent.Steps) || intent.Intent.Steps[len(operation.Attempts)] != stepKind {
 		return domain.StepAttempt{}, domain.NewError(domain.ErrScopeDenied,
@@ -835,6 +848,18 @@ func (store *Store) updateAttempt(
 	operation, err := getOperationTx(ctx, tx, operationID)
 	if err != nil {
 		return err
+	}
+	if eventType == "STEP_DISPATCH_POSSIBLE" {
+		if operation.OwnershipReleased || domain.IsTerminalOperation(operation.Status) || operation.Status == domain.OperationUnknown {
+			return domain.NewError(domain.ErrTargetBlockedUnknown, "operation cannot dispatch")
+		}
+		var intentStatus string
+		if err := tx.QueryRowContext(ctx, "SELECT status FROM v01_intents WHERE intent_id = ?", operation.IntentID).Scan(&intentStatus); err != nil {
+			return err
+		}
+		if domain.IntentStatus(intentStatus) != domain.IntentConsumed {
+			return domain.NewError(domain.ErrApprovalRevoked, "approval was revoked before dispatch")
+		}
 	}
 	index := -1
 	for candidate := range operation.Attempts {

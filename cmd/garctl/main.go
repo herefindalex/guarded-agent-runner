@@ -34,6 +34,11 @@ func main() {
 	switch os.Args[1] {
 	case "doctor":
 		doctor(os.Args[2:])
+	case "backup":
+		if len(os.Args) < 3 || os.Args[2] != "show" {
+			usage()
+		}
+		backupShow(os.Args[3:])
 	case "agent":
 		if len(os.Args) < 3 || os.Args[2] != "issue" {
 			usage()
@@ -430,6 +435,21 @@ func operationShow(arguments []string) {
 	writeJSON(operation)
 }
 
+func backupShow(arguments []string) {
+	flags := flag.NewFlagSet("backup show", flag.ExitOnError)
+	databasePath := flags.String("db", defaultDB(), "owner-controlled SQLite database")
+	backupID := flags.String("id", "", "exact reserved backup ID")
+	flags.Parse(arguments)
+	if *backupID == "" || flags.NArg() != 0 {
+		fatal("--id is required; no paths or extra arguments are accepted")
+	}
+	database := mustOpen(*databasePath)
+	defer database.Close()
+	record, err := database.GetBackup(context.Background(), *backupID)
+	must(err)
+	writeJSON(map[string]any{"backup": record, "current_archive_integrity": "NOT_CHECKED", "note": "Metadata inspection only. VALID records require a fresh owner-side archive digest check before use."})
+}
+
 func defaultDB() string { return envOr("GAR_DB", "./gar-v01.db") }
 
 func envOr(name, fallback string) string {
@@ -473,6 +493,6 @@ func fatal(message string) {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: garctl doctor | agent issue | intent show|approve|reject|revoke | operation show")
+	fmt.Fprintln(os.Stderr, "usage: garctl doctor | agent issue | intent show|approve|reject|revoke | operation show | backup show")
 	os.Exit(2)
 }

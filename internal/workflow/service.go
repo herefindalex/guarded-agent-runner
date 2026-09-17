@@ -242,9 +242,7 @@ func (service *Service) Propose(
 		return domain.IntentRecord{}, lookupErr
 	}
 
-	backupRecipeDigest, _ := domain.Digest(map[string]any{
-		"scope": "enrolled-data-root", "consistency": "offline", "exclude": []string{"logs", "cache", "temporary-sockets"},
-	})
+	backupRecipeDigest := domain.OfflineBackupRecipeDigest()
 	intent := domain.ChangeIntent{
 		SchemaVersion: "gar.change-intent.v1", IntentID: domain.NewID("intent"),
 		ClientRequestID: input.ClientRequestID, PrincipalID: scope.PrincipalID,
