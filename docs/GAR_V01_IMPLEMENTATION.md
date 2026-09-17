@@ -22,11 +22,14 @@ M3 live shadow acceptance, M4 isolated mutation, or mutation beta.
 | `internal/adapters/paper/` | Strict read-only parser for paired GARGuard atomic runtime snapshots |
 | `internal/adapters/host/` | Fixed-container Docker/data-root/admission-topology observer and strict atomic snapshot reader |
 | `internal/adapters/composite/` | Fail-closed merge of independently sourced host and Paper observations |
+| `internal/adapters/paperops/` | Owner-side fixed-container lifecycle, terminal-runtime and shutdown-log evidence for G-03 only |
+| `internal/backup/` | Owner-enrolled offline archive creation, finalization and integrity verification |
 | `internal/admission/` | Owner-only fixed config, bounded lease state, runtime acknowledgment, and fail-closed TCP gate |
 | `plugins/paper-guard/` | Java/Paper runtime snapshot producer and fail-closed pre-login admission guard; no mutation |
 | `cmd/gar/` | Honest status and loopback MCP serving; no mutation listener |
 | `cmd/gar-host/` | Separately privileged fixed-target observer; no inbound action API or shell |
 | `cmd/gar-gate/` | Fixed-target TCP admission proxy with owner-local open/close/status commands |
+| `cmd/gar-g03-verify/` | Owner-local approved S00–S05 acceptance route; no MCP exposure, restart or artifact replacement |
 | `cmd/garctl/` | Owner-local doctor, agent credential issuance, intent decisions, operation inspection |
 | `compatibility.lock` | Exact `LOCAL_PAPER_READ_ONLY` tuple and explicit mutation-blocking gate evidence |
 
@@ -71,7 +74,7 @@ of the original fixture containers. Real plugin transition, mutation and BETA
 remain NOT_RUN. The MCP server is stateless so authority is resolved again
 for every HTTP request.
 
-## G-03 foundation: implemented, real acceptance NOT_RUN
+## G-03 foundation: implemented, real acceptance FAIL
 
 The continuation starts from `744922f8ba87f6e51b4130f50a62785c0e4fd70c` on
 `feat/gar-v0.1`. M1/M2, immutable scope and intent, owner-only approval,
@@ -104,13 +107,26 @@ source attribution or validate a plugin replacement transition.
 
 `internal/domain/backup.go`, `internal/workflow/foundation.go`,
 `internal/backup/` and `internal/store/backup.go` implement the offline
-foundation. `FoundationTarget` is an owner-installed contract, currently
-exercised only by deterministic FAKE_TARGET tests. There is no production
-implementation of this stop/maintenance dispatch interface, and no live
-execution command, HTTP route or MCP tool is connected to it. The existing
-read-only host observer rejects stopped containers and cannot supply the
-offline evidence contract. Real G-03 remains NOT_RUN; these tests cannot
-establish that a real Paper process stopped safely.
+foundation. `internal/adapters/paperops/` supplies the fixed-target owner-side
+Paper lifecycle boundary, while `cmd/gar-g03-verify` prepares and executes an
+approved operation through S05 only. This command is not an MCP tool, accepts
+no caller-selected target/path/container, never starts Paper, never replaces an
+artifact and never releases writer ownership.
+
+The first real `LOCAL_PAPER` campaign used source commit
+`f81db08963f92b2fb661d33f735ddbc2b4d19441`, exact intent
+`intent_61467c63d50c22da117222676aa21901`, and independently recorded approval
+`approval_f85ceb10b11b04c3f659fba2331a8464`. S00–S02 passed. Docker then
+gracefully stopped the enrolled container with exit code 0, no OOM kill, a
+terminal GARGuard snapshot and all three shutdown log markers. The adapter had
+sent the Docker logs `since` parameter as RFC3339Nano; Docker Engine 29.1.3/API
+1.52 rejected it with HTTP 500 while requiring integer Unix seconds. Therefore
+the durable S03 attempt correctly became DISPATCH_POSSIBLE / UNKNOWN /
+UNATTRIBUTED, operation `operation_a6df25e57de1b178707d3f46a13e1c80`
+retained ownership, and S04/S05 did not run. No backup record or archive was
+created. The query now uses Unix seconds and rechecks each log line against the
+exact nanosecond dispatch boundary, with regression coverage. The failed
+campaign is not retried or promoted; G-03 is `FAIL`.
 
 The stop oracle distinguishes NOT_REQUESTED, DISPATCH_POSSIBLE in the durable
 journal, STOPPING, STOPPED_CONFIRMED, FAILED and UNKNOWN. Confirmation requires
@@ -128,7 +144,7 @@ without attribution remains EXPECTED_STATE_OBSERVED + UNATTRIBUTED and blocks.
 | S02 maintenance | Prepare and mark dispatch possible before closing admission | Correlated close receipt plus fresh MAINTENANCE and zero-player acknowledgement | Lost response/acknowledgement → UNKNOWN; retain ownership |
 | S03 graceful stop | Prepare and mark dispatch possible before exactly one stop request | Correlated lifecycle/runtime/termination evidence and the fresh pre-stop zero-player snapshot | Ambiguous dispatch/timeout → UNKNOWN, no retry; abnormal exit → NEEDS_INTERVENTION |
 | S04 offline revalidate | Read-only proof after confirmed stop | BackupReadyEvidence checks exact target/source/root, closed admission, stopped process, filesystem root and absence of a conflicting writer | Unknown facts block as PRECONDITION_UNAVAILABLE; changed target/source blocks as INTENT_STALE; known competing writer → TARGET_BUSY |
-| S05 backup | Prepare and mark dispatch possible before reserving/writing an archive | CREATING record, file/directory sync, SHA-256 reread; VALID metadata and correlated S05 completion commit in one transaction | Partial/orphan stays CREATING; unresolved dispatch → UNKNOWN; never silently adopt or overwrite artifacts |
+| S05 backup | Prepare and mark dispatch possible before reserving/writing an archive | RESERVED→WRITING→FINALIZING→VERIFYING lifecycle, file/directory sync, SHA-256 reread; VALID metadata and correlated S05 completion commit in one transaction | Partial states stay invalid and a final file without metadata becomes ORPHANED; unresolved dispatch → UNKNOWN; never silently adopt or overwrite artifacts |
 
 Every step begins as NOT_DISPATCHED / PROVEN_NOT_APPLIED. Revocation is checked
 again in the dispatch transaction. The execution budget is bounded by the
@@ -151,7 +167,7 @@ rename on Linux. It implements no extraction, restore or online snapshot.
 A backup becomes VALID only after archive completion, file sync, atomic
 finalization and directory sync, known size, SHA-256 calculation and matching
 reread, and durable metadata commit. This foundation persists explicit
-FAKE_TARGET evidence levels and rejects live-evidence reservations. The record binds backup/schema/target,
+FAKE_TARGET or fixed owner-side LOCAL_PAPER evidence levels. The record binds backup/schema/target,
 enrollment/generation/container/data-root/Paper tuple, runtime boot, exact
 intent/digest/operation/step, source inventory/config/artifact identities,
 recipe, timestamps, OFFLINE mode, size/hash and readiness evidence.
@@ -171,11 +187,12 @@ after reopen, explicitly labeling current artifact integrity NOT_CHECKED.
 | Unattributed stop / abnormal exit | Blocking unattributed evidence / NEEDS_INTERVENTION respectively |
 | Archive tamper, resource limit, unsafe links, source/target drift | No valid backup; digest tamper after completion also fails inspection |
 
-These are UNIT/FAKE_TARGET tests using temporary real files and SQLite,
-not LOCAL_PAPER or HOST_RECOVERY acceptance. The next smallest milestone is
-reviewing this S05 foundation, then implementing a fixed-target owner-side
-stop/offline observer and demonstrating it against an independently approved
-isolated Paper target with every required source predicate available. Source
+These are UNIT/FAKE_TARGET tests using temporary real files and SQLite. The
+separate LOCAL_PAPER campaign demonstrated fail-closed S03 behavior but did not
+produce backup evidence. The next smallest milestone is a fresh, explicitly
+authorized acceptance campaign against a newly enrolled safe fixture after
+reviewing the corrected shutdown-log oracle; it must not reuse or override the
+UNKNOWN operation. Source
 attribution G-04, transition G-05, real ambiguous mutation G-06, external-admin
 G-07, and S06–S10 remain outside this run.
 
@@ -184,8 +201,8 @@ G-07, and S06–S10 remain outside this run.
 - Paper and host observation paths passed an authorized isolated read-only run; no independent administrator has completed G-07 onboarding.
 - G-02 passed for the enrolled owner-recovered fixture only. No unattended
   recovery, other host tuple, or further workstation reboot is implied.
-- No live Docker lifecycle controller, artifact importer, or
-  filesystem replacer exists.
+- A fixed-target owner-side stop controller exists only for G-03 acceptance;
+  no restart route, artifact importer or filesystem replacer exists.
 - No live mutation entry point exists. `StartMutation` returns
   `UNSUPPORTED_ENVIRONMENT` even if tests construct synthetic PASS gates,
   because the M4 executor is absent.
@@ -194,7 +211,7 @@ G-07, and S06–S10 remain outside this run.
 
 ## Next executable milestone
 
-M0 still needs real G-03 stop/backup evidence, loader/source attribution,
+M0 still needs passing real G-03 stop/backup evidence, loader/source attribution,
 and a real supported plugin transition for G-04 through G-05. The remainder of M2 is G-07
 permission/onboarding evidence from an independent administrator. Mutation
 remains blocked until every required M4 gate and `LOCAL_PAPER`/`HOST_RECOVERY`

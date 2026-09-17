@@ -146,6 +146,45 @@ func TestObserverFailsClosedForCompetingWriterAndStoppedContainer(t *testing.T) 
 	}
 }
 
+func TestObserveOfflineRequiresStoppedEnrolledContainer(t *testing.T) {
+	dataRoot := makeDataRoot(t)
+	inspection := testInspection(dataRoot)
+	inspection.State.Running = false
+	inspection.State.Status = "exited"
+	inspection.State.ExitCode = 0
+	inspection.State.OOMKilled = false
+	fingerprint, _, err := bootstrapFingerprint(inspection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, err := dataRootIdentity(dataRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	socket, stop := serveDockerInspect(t, inspection)
+	defer stop()
+	observer, err := NewObserver(ObserverConfig{
+		SchemaVersion: ObserverConfigSchemaVersion, EnrollmentID: "enrollment-a",
+		DeploymentGeneration: 1, ContainerID: testContainerID, ExpectedImageID: testImageID,
+		DataRootPath: dataRoot, ExpectedDataRootIdentity: identity,
+		ExpectedBootstrapFingerprint: fingerprint, ManagedPluginSlots: map[string]string{"gar-guard": "GARGuard.jar"},
+		DockerSocketPath: socket, SnapshotPath: filepath.Join(t.TempDir(), "host.json"), IntervalSeconds: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := observer.ObserveOffline(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Running || snapshot.ContainerStatus != "exited" || snapshot.DataRootIdentity != identity {
+		t.Fatalf("offline observation lost enrolled state: %#v", snapshot)
+	}
+	if _, err := observer.Observe(context.Background()); err == nil {
+		t.Fatal("running observer accepted the stopped container")
+	}
+}
+
 func TestSnapshotRejectsDuplicateKeysAndSymlinkedPlugin(t *testing.T) {
 	now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
 	path := filepath.Join(t.TempDir(), "host.json")

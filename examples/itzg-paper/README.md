@@ -4,11 +4,13 @@ This is the disposable fixture used for the repository's exact
 `LOCAL_PAPER_READ_ONLY` evidence. It pins the inspected multi-platform itzg
 `java25` image digest and Paper 26.2 build 124. The observed tuple is recorded
 in `compatibility.lock`: G-01 passes for reproducible read-only startup, G-02
-passes the enrolled owner-assisted host-recovery checks, G-04 fails closed,
-and the remaining mutation gates are `NOT_RUN`.
+passes the enrolled owner-assisted host-recovery checks, G-03 and G-04 fail
+closed, and G-05/G-06/G-07 are `NOT_RUN`.
 
-This evidence proves only the listed local read-only interoperability. It does
-not establish mutation compatibility, backup/recovery correctness, a verified
+This evidence proves only the listed local read-only interoperability and the
+failed-closed G-03 stop campaign. Paper exited cleanly, but the operation became
+UNKNOWN before offline revalidation, so no backup was created. It does not
+establish mutation compatibility, backup/recovery correctness, a verified
 plugin transition, external-admin onboarding, or support for other Paper,
 Java, image, host, or filesystem tuples.
 

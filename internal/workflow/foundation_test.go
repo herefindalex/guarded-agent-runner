@@ -131,6 +131,21 @@ func TestFoundationThroughS05RetainsWriterAndCannotReachS06(t *testing.T) {
 	}
 }
 
+func TestFoundationPersistsExplicitLocalPaperEvidenceLevel(t *testing.T) {
+	foundation, _, operation, intent, _, _ := foundationFixture(t)
+	foundation.EvidenceLevel = "LOCAL_PAPER"
+	if err := foundation.Run(context.Background(), operation.OperationID); err != nil {
+		t.Fatal(err)
+	}
+	record, err := foundation.Backup.Inspect(context.Background(), intent.ReservedBackupID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.EvidenceLevel != "LOCAL_PAPER" {
+		t.Fatalf("backup evidence level = %q", record.EvidenceLevel)
+	}
+}
+
 func TestFoundationRevokedPreparedStopCannotDispatch(t *testing.T) {
 	f, target, op, i, _, _ := foundationFixture(t)
 	f.boundary = func(name string) error {

@@ -24,9 +24,11 @@ combined.
 > `PASS`: real IPv4/IPv6 in-flight login-close and post-reboot fail-closed checks
 > passed for the enrolled fixture. Recovery used explicit startup of the existing
 > containers; the separate recovered GARGuard build digest is recorded in the lock.
-> No further workstation reboot is authorized. G-03 has
-> an S00–S05 foundation with UNIT/FAKE_TARGET tests; real G-03 acceptance is
-> still NOT_RUN. This is not production or beta readiness.
+> No further workstation reboot is authorized. G-03 now has an owner-local,
+> fixed-target S00–S05 executor in addition to UNIT/FAKE_TARGET coverage. Its
+> first `LOCAL_PAPER` run stopped Paper cleanly but failed closed at S03 when
+> Docker rejected the shutdown-log query; no backup was created, so G-03 is
+> `FAIL`, not `PASS`. This is not production or beta readiness.
 
 ## Why GAR exists
 
@@ -97,9 +99,10 @@ go run ./cmd/garctl intent revoke --db /path/to/gar.db \
 
 Approval changes durable state only. It does not execute a mutation. The fixed
 S00-S10 change workflow is present in the immutable intent and journal. The
-S00–S05 coordinator and offline archive engine now have UNIT/FAKE_TARGET
-coverage. The live host mutation controller, artifact replacement, and recovery
-executor remain absent. `StartMutation` therefore returns
+S00–S05 coordinator and offline archive engine have UNIT/FAKE_TARGET coverage
+and an owner-local fixed-target Paper acceptance command. The first real run
+stopped at an honest S03 `UNKNOWN`; it did not execute S04/S05. Artifact
+replacement and recovery remain absent. `StartMutation` therefore returns
 `UNSUPPORTED_ENVIRONMENT` even if synthetic tests construct passing gates.
 
 ## Paper evidence architecture
@@ -215,7 +218,7 @@ filesystem, plugin, or configuration tuple is supported.
 |---|---|---|
 | G-01 | `PASS` | Exact tuple has reproducible local read-only startup evidence |
 | G-02 | `PASS` | Changed kernel boot ID and fresh post-reboot CLOSED/MAINTENANCE, zero-player, exact-topology and dual-stack fail-closed evidence; explicit recovery of existing fixture containers |
-| G-03 | `NOT_RUN` | Stop/backup safety contract, durable S00–S05 coordinator and offline archive engine pass UNIT/FAKE_TARGET tests; live adapter and real approved-target evidence remain unavailable |
+| G-03 | `FAIL` | A real approved `LOCAL_PAPER` run passed S00–S02 and cleanly stopped Paper, but shutdown-log evidence returned UNKNOWN at S03; S04/S05 were blocked and no backup was created |
 | G-04 | `FAIL` | Runtime artifact source attribution remains unavailable |
 | G-05 | `NOT_RUN` | No verified real plugin A-to-B transition |
 | G-06 | `NOT_RUN` | No crash-recovery and ambiguous-outcome campaign |
@@ -398,7 +401,8 @@ See [Security](docs/SECURITY.md) for the full threat model and limitations.
 - No arbitrary shell, subprocess, SSH, Kubernetes, Terraform, cloud, or
   caller-selected filesystem interface
 - No agent-visible approval or admission-control tool
-- No live stop/backup execution route; the S00–S05 foundation is library/test-only
+- No successful real stop-to-backup acceptance evidence; the owner-local route
+  failed closed at S03 and is not exposed through MCP
 - No runtime artifact source attribution
 - No authenticated multi-user operator UI, RBAC, signed approval, or remote
   immutable audit sink

@@ -105,7 +105,9 @@ func TestArchiveCrashBoundariesSurviveStoreReopen(t *testing.T) {
 				}
 				return nil
 			}
-			if err := e.Create(context.Background(), r, func(context.Context) error { return nil }); !errors.Is(err, crash) {
+			if err := e.Create(context.Background(), r, func(context.Context) (domain.BackupReadyEvidence, error) {
+				return r.Ready, nil
+			}); !errors.Is(err, crash) {
 				t.Fatalf("crash boundary not reached: %v", err)
 			}
 			if err := e.store.Close(); err != nil {
@@ -131,7 +133,11 @@ func TestArchiveCrashBoundariesSurviveStoreReopen(t *testing.T) {
 					t.Fatal("metadata and step completion were not atomic")
 				}
 			} else {
-				if domain.CodeOf(inspectErr) != domain.ErrBackupNotReady || stored.Status != domain.BackupCreating {
+				expectedStatus := domain.BackupWriting
+				if point == "archive_renamed" {
+					expectedStatus = domain.BackupOrphaned
+				}
+				if domain.CodeOf(inspectErr) != domain.ErrBackupNotReady || stored.Status != expectedStatus {
 					t.Fatalf("partial/orphan promoted: %v %+v", inspectErr, stored)
 				}
 				if point == "temp_created" {
@@ -141,7 +147,9 @@ func TestArchiveCrashBoundariesSurviveStoreReopen(t *testing.T) {
 					t.Fatal("incomplete evidence not retained", err)
 				}
 			}
-			if err := e.Create(context.Background(), r, func(context.Context) error { return nil }); err == nil {
+			if err := e.Create(context.Background(), r, func(context.Context) (domain.BackupReadyEvidence, error) {
+				return r.Ready, nil
+			}); err == nil {
 				t.Fatal("backup dispatch blindly retried")
 			}
 		})
@@ -163,7 +171,14 @@ func TestOfflineArchiveContentsAndIntegrity(t *testing.T) {
 		t.Fatal(err)
 	}
 	checks := 0
-	if err := e.Create(context.Background(), r, func(context.Context) error { checks++; return nil }); err != nil {
+	if err := e.Create(context.Background(), r, func(context.Context) (domain.BackupReadyEvidence, error) {
+		checks++
+		ready := r.Ready
+		if checks == 2 {
+			ready.Offline.References = append(append([]string(nil), ready.Offline.References...), "post-archive-revalidation")
+		}
+		return ready, nil
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if checks != 2 {
@@ -172,6 +187,9 @@ func TestOfflineArchiveContentsAndIntegrity(t *testing.T) {
 	stored, err := e.Inspect(context.Background(), r.BackupID)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if references := stored.Ready.Offline.References; references[len(references)-1] != "post-archive-revalidation" {
+		t.Fatalf("completed metadata lost final offline revalidation: %v", references)
 	}
 	name, _ := archiveName(r.BackupID)
 	p := filepath.Join(e.config.Destination, name)
@@ -202,7 +220,7 @@ func TestOfflineArchiveContentsAndIntegrity(t *testing.T) {
 	if _, ok := seen["logs/latest.log"]; ok {
 		t.Fatal("recipe exclusion ignored")
 	}
-	if err := e.store.CompleteBackup(context.Background(), r.BackupID, stored.ArchiveSHA256, stored.ArchiveSizeBytes, e.now()); err == nil {
+	if err := e.store.CompleteBackup(context.Background(), r.BackupID, stored.ArchiveSHA256, stored.ArchiveSizeBytes, stored.Ready, e.now()); err == nil {
 		t.Fatal("completed metadata mutable")
 	}
 	if err := os.WriteFile(p, []byte("corruption"), 0600); err != nil {
@@ -210,6 +228,82 @@ func TestOfflineArchiveContentsAndIntegrity(t *testing.T) {
 	}
 	if _, err := e.Inspect(context.Background(), r.BackupID); domain.CodeOf(err) != domain.ErrBackupNotReady {
 		t.Fatalf("corruption accepted: %v", err)
+	}
+}
+
+func TestOfflineArchiveUsesExactEnrolledBindMountSource(t *testing.T) {
+	for _, placeholder := range []string{"file", "missing", "directory"} {
+		t.Run(placeholder, func(t *testing.T) {
+			engine, record, _ := engineFixture(t)
+			external := filepath.Join(t.TempDir(), "GARGuard.jar")
+			content := []byte("registered source artifact")
+			if err := os.WriteFile(external, content, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			logical := filepath.Join(engine.config.DataRoot, "a.jar")
+			switch placeholder {
+			case "file":
+				if err := os.WriteFile(logical, nil, 0o600); err != nil {
+					t.Fatal(err)
+				}
+			case "missing":
+				if err := os.Remove(logical); err != nil {
+					t.Fatal(err)
+				}
+			case "directory":
+				if err := os.Remove(logical); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Mkdir(logical, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(logical, "conflict"), []byte("must not leak"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			config := engine.config
+			config.SourceArtifactFile = external
+			liveEngine, err := New(config, engine.store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := liveEngine.Create(context.Background(), record, func(context.Context) (domain.BackupReadyEvidence, error) {
+				return record.Ready, nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			name, _ := archiveName(record.BackupID)
+			file, err := os.Open(filepath.Join(config.Destination, name))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer file.Close()
+			reader := tar.NewReader(file)
+			entries := map[string][]byte{}
+			for {
+				header, nextErr := reader.Next()
+				if errors.Is(nextErr, io.EOF) {
+					break
+				}
+				if nextErr != nil {
+					t.Fatal(nextErr)
+				}
+				archived, readErr := io.ReadAll(reader)
+				if readErr != nil {
+					t.Fatal(readErr)
+				}
+				if _, duplicate := entries[header.Name]; duplicate {
+					t.Fatalf("duplicate archive entry %q", header.Name)
+				}
+				entries[header.Name] = archived
+			}
+			if string(entries["a.jar"]) != string(content) {
+				t.Fatalf("archive lost exact enrolled bind source: %v", entries)
+			}
+			if _, leaked := entries["a.jar/conflict"]; leaked {
+				t.Fatal("directory placeholder descendant leaked into archive")
+			}
+		})
 	}
 }
 
@@ -255,12 +349,12 @@ func TestArchiveRejectsUnsafeOrChangedSources(t *testing.T) {
 				}
 			}
 			checks := 0
-			err := e.Create(context.Background(), r, func(context.Context) error {
+			err := e.Create(context.Background(), r, func(context.Context) (domain.BackupReadyEvidence, error) {
 				checks++
 				if mode == "offline_lost" && checks == 2 {
-					return domain.NewError(domain.ErrIntentStale, "writer appeared")
+					return domain.BackupReadyEvidence{}, domain.NewError(domain.ErrIntentStale, "writer appeared")
 				}
-				return nil
+				return r.Ready, nil
 			})
 			if err == nil {
 				t.Fatal("unsafe backup succeeded")
@@ -300,14 +394,16 @@ func TestArchiveDigestRereadMustMatchWrittenBytes(t *testing.T) {
 		}
 		return nil
 	}
-	if err := e.Create(context.Background(), r, func(context.Context) error { return nil }); domain.CodeOf(err) != domain.ErrBackupNotReady {
+	if err := e.Create(context.Background(), r, func(context.Context) (domain.BackupReadyEvidence, error) {
+		return r.Ready, nil
+	}); domain.CodeOf(err) != domain.ErrBackupNotReady {
 		t.Fatalf("reread mismatch not detected: %v", err)
 	}
 	stored, err := e.store.GetBackup(context.Background(), r.BackupID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stored.Status != domain.BackupCreating {
+	if stored.Status != domain.BackupVerifying {
 		t.Fatal("digest mismatch became valid")
 	}
 }
@@ -348,7 +444,9 @@ func TestBackupReservationRejectsAlteredApprovedBindings(t *testing.T) {
 			case "status":
 				r.Status = domain.BackupValid
 			}
-			if err := e.Create(context.Background(), r, func(context.Context) error { return nil }); err == nil {
+			if err := e.Create(context.Background(), r, func(context.Context) (domain.BackupReadyEvidence, error) {
+				return r.Ready, nil
+			}); err == nil {
 				t.Fatal("altered approval binding accepted")
 			}
 			files, err := os.ReadDir(e.config.Destination)

@@ -67,6 +67,14 @@ func NewSnapshotTarget(path string, enrollment domain.Enrollment) (*SnapshotTarg
 
 func (target *SnapshotTarget) SetClockForTest(now func() time.Time) { target.now = now }
 
+// ReadSnapshot returns the strictly decoded runtime snapshot together with its
+// content digest and freshness classification. Owner-side lifecycle adapters
+// use this to correlate the last terminal GARGuard publication with a fixed
+// container stop. Agent-facing callers continue to use Observe/ReadTool.
+func (target *SnapshotTarget) ReadSnapshot() (Snapshot, string, domain.Availability, error) {
+	return target.read()
+}
+
 func (target *SnapshotTarget) Observe(_ context.Context, enrollment domain.Enrollment) (domain.ObservationBundle, error) {
 	if enrollment.EnrollmentID != target.enrollment.EnrollmentID ||
 		enrollment.DeploymentGeneration != target.enrollment.DeploymentGeneration {

@@ -37,20 +37,21 @@ type MaintenanceReceipt struct {
 }
 
 type OfflineBackup interface {
-	Create(context.Context, domain.BackupRecord, func(context.Context) error) error
+	Create(context.Context, domain.BackupRecord, func(context.Context) (domain.BackupReadyEvidence, error)) error
 	Inspect(context.Context, string) (domain.BackupRecord, error)
 }
 
 // Foundation is intentionally separate from Service/MCP and cannot execute S06.
 // Only UNIT/FAKE_TARGET evidence is currently established for this coordinator.
 type Foundation struct {
-	Store       *store.Store
-	Enrollment  domain.Enrollment
-	Target      FoundationTarget
-	Backup      OfflineBackup
-	Now         func() time.Time
-	StopTimeout time.Duration
-	boundary    func(string) error
+	Store         *store.Store
+	Enrollment    domain.Enrollment
+	Target        FoundationTarget
+	Backup        OfflineBackup
+	EvidenceLevel string
+	Now           func() time.Time
+	StopTimeout   time.Duration
+	boundary      func(string) error
 }
 
 func (f *Foundation) now() time.Time {
@@ -58,6 +59,13 @@ func (f *Foundation) now() time.Time {
 		return f.Now().UTC()
 	}
 	return time.Now().UTC()
+}
+
+func (f *Foundation) evidenceLevel() string {
+	if f.EvidenceLevel == "" {
+		return "FAKE_TARGET"
+	}
+	return f.EvidenceLevel
 }
 func (f *Foundation) checkpoint(name string) error {
 	if f.boundary != nil {
@@ -238,7 +246,7 @@ func (f *Foundation) Run(ctx context.Context, operationID string) error {
 			evidence = ready
 		case 5:
 			r := domain.BackupRecord{
-				EvidenceLevel: "FAKE_TARGET",
+				EvidenceLevel: f.evidenceLevel(),
 				BackupID:      i.ReservedBackupID, SchemaVersion: "gar.backup.v1", TargetID: f.Enrollment.TargetID,
 				EnrollmentID: i.EnrollmentID, DeploymentGeneration: i.DeploymentGeneration, ContainerIdentity: i.ContainerID,
 				DataRootIdentity: f.Enrollment.DataRootIdentity, PaperTuple: i.PaperTuple, BootIDBeforeStop: i.ExpectedBootID,
@@ -248,7 +256,9 @@ func (f *Foundation) Run(ctx context.Context, operationID string) error {
 				BackupRecipeID:  domain.BackupRecipeID, BackupRecipeDigest: i.BackupRecipeDigest,
 				CreatedAt: f.now(), ConsistencyMode: "OFFLINE", Status: domain.BackupCreating, Ready: ready,
 			}
-			if err := f.Backup.Create(ctx, r, func(ctx context.Context) error { _, err := f.offline(ctx, i, op); return err }); err != nil {
+			if err := f.Backup.Create(ctx, r, func(ctx context.Context) (domain.BackupReadyEvidence, error) {
+				return f.offline(ctx, i, op)
+			}); err != nil {
 				// Metadata commit may have succeeded even when its response was lost.
 				fresh, readErr := f.Store.GetOperation(ctx, operationID)
 				if readErr == nil && len(fresh.Attempts) == 6 && fresh.Attempts[5].EffectState == domain.EffectExpectedObserved && fresh.Attempts[5].Attribution == domain.AttributionCorrelated {

@@ -15,15 +15,20 @@ This document separates implemented behavior from locally verified evidence and 
 
 ## GAR-PCS-001 M1 core and M2 read-only alpha
 
-G-03 continuation: the S00–S05 coordinator, stop oracle, offline readiness
-contract, bounded archive engine and durable backup metadata now pass
-UNIT/FAKE_TARGET tests, including six crash/reopen boundaries. No live stop
-adapter or execution route is installed. G-03 remains NOT_RUN. G-02 changed
+G-03 continuation: the S00–S05 coordinator, fixed-target Paper stop adapter,
+offline readiness contract, bounded archive engine and durable backup metadata
+now pass UNIT/FAKE_TARGET tests, including six crash/reopen boundaries. The
+owner-local `gar-g03-verify` route was exercised against the enrolled isolated
+Paper target. S00–S02 passed and Paper exited cleanly, but Docker rejected the
+RFC3339Nano logs query, so S03 became UNKNOWN, retained writer ownership and
+blocked S04/S05. No backup record or archive exists. The query bug is fixed and
+covered by regression tests, but this campaign cannot be retried or promoted;
+G-03 is `FAIL`. G-02 changed
 FAIL → PASS after verification of the existing reboot at 2026-09-17T08:41:43Z.
 The kernel boot ID changed and the original fixture containers recovered with
 fresh CLOSED/MAINTENANCE, zero-player and dual-stack fail-closed observations.
 No additional workstation reboot was performed or is authorized. Current gates:
-G-01 PASS, G-02 PASS, G-03 NOT_RUN, G-04 FAIL, G-05/G-06/G-07 NOT_RUN.
+G-01 PASS, G-02 PASS, G-03 FAIL, G-04 FAIL, G-05/G-06/G-07 NOT_RUN.
 
 The current baseline commit `744922f8ba87f6e51b4130f50a62785c0e4fd70c` has
 successful hosted [CI](https://github.com/herefindalex/guarded-agent-runner/actions/runs/35190266318)
@@ -38,7 +43,7 @@ changes, and CI cannot establish real Paper G-03 acceptance.
 | `go vet ./...` | PASS |
 | Agent tool count | PASS, exactly 10 and no approval tool |
 | Fake-target mutation dispatch | PASS, zero; mutation entry point returns `UNSUPPORTED_ENVIRONMENT` |
-| `compatibility.lock` | Historical `LOCAL_PAPER_READ_ONLY` tuple plus G-02 `HOST_RECOVERY` evidence; G-01/G-02 `PASS`, G-04 `FAIL`, G-03/G-05/G-06/G-07 `NOT_RUN`; mutation disabled |
+| `compatibility.lock` | Historical `LOCAL_PAPER_READ_ONLY` tuple, G-02 `HOST_RECOVERY`, and the exact failed G-03 `LOCAL_PAPER` campaign; G-01/G-02 `PASS`, G-03/G-04 `FAIL`, G-05/G-06/G-07 `NOT_RUN`; mutation disabled |
 | MCP Streamable HTTP transport | `LOCAL_VERIFIED`; official SDK client plus real authenticated loopback MCP against the isolated Paper fixture |
 | Paper guard and runtime snapshot adapter | `LOCAL_VERIFIED`; Paper 26.2 build 124 loaded GARGuard 0.1.0 and published fresh bounded snapshots across a normal restart |
 | Paper admission guard | `LOCAL_VERIFIED`; maintenance rejects pre-login, a fresh matching lease reports `OPEN_READ_ONLY_ALPHA`, and missing/stale/cross-generation state fails closed |
@@ -46,7 +51,7 @@ changes, and CI cannot establish real Paper G-03 acceptance.
 | Admission TCP gate | `LOCAL_VERIFIED`; IPv4/IPv6 closed/open checks, bounded lease, runtime acknowledgment, in-flight TCP drop, and gate/Paper restart-to-closed behavior passed |
 | Minecraft in-flight login-close | `LOCAL_PAPER`; protocol 776 Login Start remained in flight before close, connection terminated in 13 ms, players stayed zero |
 | Read-only MCP tools | `LOCAL_VERIFIED`; exactly 10 tools, no approval tool, live health/player/performance/plugin/error/change reads; backup honestly unavailable |
-| Host recovery, real plugin transition, mutation beta | G-02 `HOST_RECOVERY` PASS after explicit restart of the original fixture containers; rebuilt guard JAR digest recorded separately; G-04 source attribution and G-03/G-05/G-06/G-07 remain incomplete |
+| Host recovery, stop/backup, real plugin transition | G-02 `HOST_RECOVERY` PASS; G-03 failed closed at S03 with no backup; G-04 source attribution fails and G-05/G-06/G-07 remain incomplete |
 
 Detailed mapping: [GAR v0.1 implementation status](GAR_V01_IMPLEMENTATION.md).
 

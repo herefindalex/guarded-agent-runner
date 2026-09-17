@@ -46,16 +46,18 @@ MAINTENANCE, zero-player, exact-topology and IPv4/IPv6 gate-close observations
 passed. No further workstation reboot is authorized. The rebuilt guard artifact
 digest is recorded separately from the historical G-01 artifact; this does not
 prove artifact attribution or unattended startup. G-04 fails because runtime source attribution
-is unavailable. G-03/G-05/G-06/G-07 remain `NOT_RUN`, and the mutation entry point returns
+is unavailable. G-03 is `FAIL`; G-05/G-06/G-07 remain `NOT_RUN`, and the mutation entry point returns
 `UNSUPPORTED_ENVIRONMENT` even when a test constructs synthetic PASS gates.
-The offline backup foundation has UNIT/FAKE_TARGET coverage and does not expose
-a live dispatch route. Stop confirmation requires independently observed lifecycle
+The offline backup foundation has UNIT/FAKE_TARGET coverage and an owner-local,
+fixed-target `LOCAL_PAPER` route that is not exposed through MCP. Its first run
+failed closed at S03 after Paper stopped because graceful-log evidence was
+unavailable; no backup was created. Stop confirmation requires independently observed lifecycle
 and terminal runtime evidence with operation/step attribution. Possible dispatch
 with unknown outcome retains writer ownership and blocks forward execution.
 Backup partials and orphan archives remain invalid; VALID metadata and S05
 completion commit atomically only after fsync, finalization and digest reread.
 Source/destination paths come from owner configuration, never an agent request.
-S06–S10 preparation is explicitly disabled. Real stop/backup acceptance, artifact
+S06–S10 preparation is explicitly disabled. Passing real stop/backup acceptance, artifact
 replacement, recovery, and independent-admin onboarding remain later milestones.
 
 The FastAPI/React approval UI described below is legacy service-sandbox code. It is not an operator approval channel for GAR-PCS-001 and must not be exposed to an agent as proof of the Paper security model.
