@@ -145,6 +145,26 @@ func TestProposalIdempotencyFreezesFirstObservation(t *testing.T) {
 	}
 }
 
+func TestG03BackupOnlyProposalRequiresOwnerHarnessPath(t *testing.T) {
+	fx := newFixture(t)
+	profile := fx.service.Registry.Profiles["example-a-b"]
+	profile.Eligibility = "G03_BACKUP_ONLY"
+	fx.service.Registry.Profiles[profile.ProfileID] = profile
+
+	input := proposal("g03-owner-only", "stop after verified offline backup")
+	if _, err := fx.service.Propose(context.Background(), fx.scope, input); domain.CodeOf(err) != domain.ErrUnsupportedTransition {
+		t.Fatalf("agent proposal accepted G03_BACKUP_ONLY profile: %v", err)
+	}
+	record, err := fx.service.ProposeG03Acceptance(context.Background(), fx.scope, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.Status != domain.IntentAwaitingApproval || record.Intent.ReservedBackupID == "" ||
+		record.Intent.IntentDigest == "" || record.Intent.Steps[5] != "S05_CREATE_BACKUP" {
+		t.Fatalf("owner G-03 proposal lost immutable approval boundary: %#v", record)
+	}
+}
+
 // AT-018: unavailable is not zero and cannot produce an approvable intent.
 func TestUnavailablePlayersFailsClosed(t *testing.T) {
 	fx := newFixture(t)

@@ -25,6 +25,18 @@ func (registry Registry) ProfileFor(pluginID, targetArtifactID string) (domain.T
 		"no owner-registered VERIFIED_TRANSITION matches plugin and artifact IDs")
 }
 
+// ProfileForG03Acceptance is restricted to the owner-local G-03 harness. MCP
+// proposal handling continues to accept VERIFIED_TRANSITION profiles only.
+func (registry Registry) ProfileForG03Acceptance(pluginID, targetArtifactID string) (domain.TransitionProfile, error) {
+	for _, profile := range registry.Profiles {
+		if profile.PluginID == pluginID && profile.ToArtifactID == targetArtifactID && profile.Eligibility == "G03_BACKUP_ONLY" {
+			return profile, nil
+		}
+	}
+	return domain.TransitionProfile{}, domain.NewError(domain.ErrUnsupportedTransition,
+		"no owner-registered G03_BACKUP_ONLY profile matches plugin and artifact IDs")
+}
+
 type TargetReader interface {
 	Observe(ctx context.Context, enrollment domain.Enrollment) (domain.ObservationBundle, error)
 	ReadTool(ctx context.Context, name string, arguments map[string]any) (any, error)

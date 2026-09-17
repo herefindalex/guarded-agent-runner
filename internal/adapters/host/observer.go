@@ -246,6 +246,17 @@ func newObserver(config ObserverConfig, requirePins bool) (*Observer, error) {
 func (observer *Observer) SetClockForTest(now func() time.Time) { observer.now = now }
 
 func (observer *Observer) Observe(ctx context.Context) (Snapshot, error) {
+	return observer.observe(ctx, false)
+}
+
+// ObserveOffline applies the same enrolled identity, mount, artifact and
+// admission-topology checks as Observe, but requires the Paper container to be
+// stopped. It is an owner-side G-03 primitive and is never exposed through MCP.
+func (observer *Observer) ObserveOffline(ctx context.Context) (Snapshot, error) {
+	return observer.observe(ctx, true)
+}
+
+func (observer *Observer) observe(ctx context.Context, requireStopped bool) (Snapshot, error) {
 	now := observer.now().UTC()
 	inspection, err := observer.inspectContainer(ctx)
 	if err != nil {
@@ -254,10 +265,14 @@ func (observer *Observer) Observe(ctx context.Context) (Snapshot, error) {
 	if inspection.ID != observer.config.ContainerID {
 		return observer.unavailable(now, "CONTAINER_ID_MISMATCH"), fmt.Errorf("container ID mismatch")
 	}
-	if !inspection.State.Running || inspection.State.Status != "running" {
+	if requireStopped {
+		if inspection.State.Running || inspection.State.Status != "exited" {
+			return observer.unavailable(now, "CONTAINER_NOT_STOPPED"), fmt.Errorf("container is not stopped")
+		}
+	} else if !inspection.State.Running || inspection.State.Status != "running" {
 		return observer.unavailable(now, "CONTAINER_NOT_RUNNING"), fmt.Errorf("container is not running")
 	}
-	if inspection.State.Health != nil && inspection.State.Health.Status == "unhealthy" {
+	if !requireStopped && inspection.State.Health != nil && inspection.State.Health.Status == "unhealthy" {
 		return observer.unavailable(now, "CONTAINER_UNHEALTHY"), fmt.Errorf("container is unhealthy")
 	}
 	if inspection.HostConfig.RestartPolicy.Name != "no" {
@@ -423,9 +438,13 @@ type dockerInspection struct {
 		Labels     map[string]string `json:"Labels"`
 	} `json:"Config"`
 	State struct {
-		Status  string `json:"Status"`
-		Running bool   `json:"Running"`
-		Health  *struct {
+		Status     string `json:"Status"`
+		Running    bool   `json:"Running"`
+		OOMKilled  bool   `json:"OOMKilled"`
+		ExitCode   int    `json:"ExitCode"`
+		StartedAt  string `json:"StartedAt"`
+		FinishedAt string `json:"FinishedAt"`
+		Health     *struct {
 			Status string `json:"Status"`
 		} `json:"Health"`
 	} `json:"State"`

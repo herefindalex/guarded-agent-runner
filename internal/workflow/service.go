@@ -181,6 +181,26 @@ func (service *Service) Propose(
 	scope domain.AgentSessionScope,
 	input domain.ProposalInput,
 ) (domain.IntentRecord, error) {
+	return service.propose(ctx, scope, input, false)
+}
+
+// ProposeG03Acceptance is available only to the owner-local acceptance
+// command. It creates the same immutable, approval-bound ChangeIntent while
+// allowing a profile that can execute only through the S05 store boundary.
+func (service *Service) ProposeG03Acceptance(
+	ctx context.Context,
+	scope domain.AgentSessionScope,
+	input domain.ProposalInput,
+) (domain.IntentRecord, error) {
+	return service.propose(ctx, scope, input, true)
+}
+
+func (service *Service) propose(
+	ctx context.Context,
+	scope domain.AgentSessionScope,
+	input domain.ProposalInput,
+	g03Only bool,
+) (domain.IntentRecord, error) {
 	if err := input.Validate(); err != nil {
 		return domain.IntentRecord{}, err
 	}
@@ -192,6 +212,9 @@ func (service *Service) Propose(
 			"plugin is outside fixed session scope")
 	}
 	profile, err := service.Registry.ProfileFor(input.PluginID, input.TargetArtifactID)
+	if g03Only {
+		profile, err = service.Registry.ProfileForG03Acceptance(input.PluginID, input.TargetArtifactID)
+	}
 	if err != nil {
 		return domain.IntentRecord{}, err
 	}

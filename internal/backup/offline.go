@@ -26,6 +26,7 @@ type Config struct {
 	DataRoot           string
 	Destination        string
 	SourceArtifactPath string // fixed owner-enrolled path relative to DataRoot
+	SourceArtifactFile string // optional fixed host source for an enrolled read-only bind mount
 	Enrollment         domain.Enrollment
 	MaxBytes           int64
 	MaxFiles           int
@@ -43,6 +44,19 @@ func New(config Config, database *store.Store) (*Engine, error) {
 	config.Enrollment.AllowedPlugins = append([]string(nil), config.Enrollment.AllowedPlugins...)
 	if !fs.ValidPath(config.SourceArtifactPath) || config.SourceArtifactPath == "." || strings.Contains(config.SourceArtifactPath, "\\") {
 		return nil, fmt.Errorf("fixed source artifact path is required")
+	}
+	if config.SourceArtifactFile != "" {
+		if !filepath.IsAbs(config.SourceArtifactFile) || filepath.Clean(config.SourceArtifactFile) != config.SourceArtifactFile {
+			return nil, fmt.Errorf("mounted source artifact must be a clean absolute path")
+		}
+		resolved, err := filepath.EvalSymlinks(config.SourceArtifactFile)
+		if err != nil || resolved != config.SourceArtifactFile {
+			return nil, fmt.Errorf("mounted source artifact must exist without symlinks")
+		}
+		info, err := os.Stat(config.SourceArtifactFile)
+		if err != nil || !info.Mode().IsRegular() || info.Size() < 1 {
+			return nil, fmt.Errorf("mounted source artifact must be a non-empty regular file")
+		}
 	}
 	top := strings.Split(config.SourceArtifactPath, "/")[0]
 	if top == "logs" || top == "cache" || top == "temporary-sockets" {
@@ -103,13 +117,15 @@ func (e *Engine) checkpoint(name string) error {
 // Create never resumes partial work. check must freshly revalidate the offline
 // writer immediately before and after archive creation. Final metadata and S05
 // completion are committed atomically; incomplete/orphan files remain invalid.
-func (e *Engine) Create(ctx context.Context, r domain.BackupRecord, check func(context.Context) error) error {
+func (e *Engine) Create(ctx context.Context, r domain.BackupRecord, check func(context.Context) (domain.BackupReadyEvidence, error)) error {
 	if check == nil {
 		return domain.NewError(domain.ErrPreconditionUnavailable, "offline revalidation is required")
 	}
-	if err := check(ctx); err != nil {
+	ready, err := check(ctx)
+	if err != nil {
 		return err
 	}
+	r.Ready = ready
 	if r.TargetID != e.config.Enrollment.TargetID || r.DataRootIdentity != e.config.Enrollment.DataRootIdentity {
 		return domain.NewError(domain.ErrIntentStale, "backup engine enrollment changed")
 	}
@@ -142,7 +158,7 @@ func (e *Engine) Create(ctx context.Context, r domain.BackupRecord, check func(c
 	if len(r.SourceArtifacts) != 1 {
 		return domain.NewError(domain.ErrPreconditionUnavailable, "source artifact evidence missing")
 	}
-	artifactDigest, _, err := verify(ctx, source, e.config.SourceArtifactPath, e.config.MaxBytes)
+	artifactDigest, _, err := e.verifySourceArtifact(ctx, source)
 	if err != nil {
 		return err
 	}
@@ -153,6 +169,9 @@ func (e *Engine) Create(ctx context.Context, r domain.BackupRecord, check func(c
 		return domain.NewError(domain.ErrBackupNotReady, "archive exists or cannot be inspected; manual reconciliation required")
 	}
 	if err := e.store.ReserveBackup(ctx, r, e.now().UTC()); err != nil {
+		return err
+	}
+	if err := e.store.TransitionBackupStatus(ctx, r.BackupID, domain.BackupWriting, e.now().UTC()); err != nil {
 		return err
 	}
 	// Deliberately preserve partial files for inspection; there is no automatic
@@ -176,6 +195,9 @@ func (e *Engine) Create(ctx context.Context, r domain.BackupRecord, check func(c
 	if err := file.Close(); err != nil {
 		return err
 	}
+	if err := e.store.TransitionBackupStatus(ctx, r.BackupID, domain.BackupFinalizing, e.now().UTC()); err != nil {
+		return err
+	}
 	directory, err := dest.Open(".")
 	if err != nil {
 		return err
@@ -191,6 +213,9 @@ func (e *Engine) Create(ctx context.Context, r domain.BackupRecord, check func(c
 	if err := e.checkpoint("archive_renamed"); err != nil {
 		return err
 	}
+	if err := e.store.TransitionBackupStatus(ctx, r.BackupID, domain.BackupVerifying, e.now().UTC()); err != nil {
+		return err
+	}
 	digest, size, err := verify(ctx, dest, name, e.config.MaxBytes)
 	if err != nil {
 		return err
@@ -198,17 +223,18 @@ func (e *Engine) Create(ctx context.Context, r domain.BackupRecord, check func(c
 	if digest != hex.EncodeToString(hash.Sum(nil)) {
 		return domain.NewError(domain.ErrBackupNotReady, "archive reread digest mismatch")
 	}
-	if err := check(ctx); err != nil {
+	ready, err = check(ctx)
+	if err != nil {
 		return err
 	}
-	artifactDigest, _, err = verify(ctx, source, e.config.SourceArtifactPath, e.config.MaxBytes)
+	artifactDigest, _, err = e.verifySourceArtifact(ctx, source)
 	if err != nil {
 		return err
 	}
 	if artifactDigest != r.SourceArtifacts[0].SHA256 {
 		return domain.NewError(domain.ErrIntentStale, "source artifact changed during backup")
 	}
-	if err := e.store.CompleteBackup(ctx, r.BackupID, digest, size, e.now().UTC()); err != nil {
+	if err := e.store.CompleteBackup(ctx, r.BackupID, digest, size, ready, e.now().UTC()); err != nil {
 		return err
 	}
 	return e.checkpoint("metadata_committed")
@@ -255,6 +281,13 @@ func (e *Engine) archive(ctx context.Context, root *os.Root, output io.Writer) e
 		}
 		if !fs.ValidPath(name) || path.IsAbs(name) || strings.Contains(name, "\\") {
 			return fmt.Errorf("unsafe archive path")
+		}
+		if e.config.SourceArtifactFile != "" &&
+			(name == e.config.SourceArtifactPath || strings.HasPrefix(name, e.config.SourceArtifactPath+"/")) {
+			if entry.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
 		}
 		top := strings.Split(name, "/")[0]
 		if top == "logs" || top == "cache" || top == "temporary-sockets" {
@@ -318,7 +351,90 @@ func (e *Engine) archive(ctx context.Context, root *os.Root, output io.Writer) e
 	if err != nil {
 		return err
 	}
+	if e.config.SourceArtifactFile != "" {
+		count++
+		if count > e.config.MaxFiles {
+			return fmt.Errorf("archive file count limit exceeded")
+		}
+		if err := e.archiveMountedArtifact(ctx, tw, e.config.SourceArtifactPath); err != nil {
+			return err
+		}
+	}
 	return tw.Close()
+}
+
+func (e *Engine) verifySourceArtifact(ctx context.Context, root *os.Root) (string, int64, error) {
+	if e.config.SourceArtifactFile == "" {
+		return verify(ctx, root, e.config.SourceArtifactPath, e.config.MaxBytes)
+	}
+	file, err := openNoFollowRegular(e.config.SourceArtifactFile)
+	if err != nil {
+		return "", 0, err
+	}
+	defer file.Close()
+	return verifyFile(ctx, file, e.config.MaxBytes)
+}
+
+func (e *Engine) archiveMountedArtifact(ctx context.Context, tw *tar.Writer, name string) error {
+	file, err := openNoFollowRegular(e.config.SourceArtifactFile)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	before, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	stat, ok := before.Sys().(*syscall.Stat_t)
+	if !ok || stat.Nlink != 1 {
+		return fmt.Errorf("mounted source artifact has unsafe link count")
+	}
+	header, err := tar.FileInfoHeader(before, "")
+	if err != nil {
+		return err
+	}
+	header.Name = name
+	if err := tw.WriteHeader(header); err != nil {
+		return err
+	}
+	if _, err := io.CopyN(tw, contextReader{ctx, file}, before.Size()); err != nil {
+		return err
+	}
+	after, err := file.Stat()
+	if err != nil || !os.SameFile(before, after) || before.Size() != after.Size() || !before.ModTime().Equal(after.ModTime()) {
+		return fmt.Errorf("mounted source artifact changed during backup")
+	}
+	return nil
+}
+
+func openNoFollowRegular(name string) (*os.File, error) {
+	fd, err := unix.Open(name, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, err
+	}
+	file := os.NewFile(uintptr(fd), name)
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		file.Close()
+		return nil, fmt.Errorf("source artifact is not a regular file")
+	}
+	return file, nil
+}
+
+func verifyFile(ctx context.Context, file *os.File, limit int64) (string, int64, error) {
+	info, err := file.Stat()
+	if err != nil {
+		return "", 0, err
+	}
+	if !info.Mode().IsRegular() || info.Size() < 1 || info.Size() > limit {
+		return "", 0, fmt.Errorf("invalid source artifact file")
+	}
+	hash := sha256.New()
+	size, err := io.Copy(hash, io.LimitReader(contextReader{ctx, file}, limit+1))
+	if err != nil || size != info.Size() {
+		return "", 0, fmt.Errorf("source artifact changed during verification")
+	}
+	return hex.EncodeToString(hash.Sum(nil)), size, nil
 }
 
 func verify(ctx context.Context, root *os.Root, name string, limit int64) (string, int64, error) {
@@ -352,6 +468,19 @@ func (e *Engine) Inspect(ctx context.Context, id string) (domain.BackupRecord, e
 		return r, err
 	}
 	if err := r.ValidateCompleted(); err != nil {
+		name, nameErr := archiveName(id)
+		if nameErr == nil && r.Status != domain.BackupOrphaned {
+			root, openErr := os.OpenRoot(e.config.Destination)
+			if openErr == nil {
+				_, statErr := root.Lstat(name)
+				root.Close()
+				if statErr == nil {
+					if transitionErr := e.store.TransitionBackupStatus(ctx, id, domain.BackupOrphaned, e.now().UTC()); transitionErr == nil {
+						r, _ = e.store.GetBackup(ctx, id)
+					}
+				}
+			}
+		}
 		return r, err
 	}
 	en := e.config.Enrollment

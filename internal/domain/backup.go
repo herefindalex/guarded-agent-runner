@@ -159,12 +159,22 @@ func OfflineBackupRecipeDigest() string {
 type BackupStatus string
 
 const (
-	BackupCreating BackupStatus = "CREATING"
-	BackupValid    BackupStatus = "VALID"
+	BackupReserved   BackupStatus = "RESERVED"
+	BackupWriting    BackupStatus = "WRITING"
+	BackupFinalizing BackupStatus = "FINALIZING"
+	BackupVerifying  BackupStatus = "VERIFYING"
+	BackupValid      BackupStatus = "VALID"
+	BackupFailed     BackupStatus = "FAILED"
+	BackupUnknown    BackupStatus = "UNKNOWN"
+	BackupOrphaned   BackupStatus = "ORPHANED"
+
+	// BackupCreating is retained as a source-level alias for older fixtures.
+	// New durable records use the explicit RESERVED state.
+	BackupCreating = BackupReserved
 )
 
-// CREATING includes interrupted work and orphan archives. It is never promoted
-// during recovery, even when a final archive happens to exist.
+// Incomplete and orphan archives are never promoted during recovery, even when
+// a final archive happens to exist.
 type BackupRecord struct {
 	EvidenceLevel         string              `json:"evidence_level"`
 	BackupID              string              `json:"backup_id"`
