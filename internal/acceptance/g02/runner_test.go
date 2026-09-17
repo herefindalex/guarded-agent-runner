@@ -4,14 +4,18 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	hostadapter "guarded-agent-runner/internal/adapters/host"
 	"guarded-agent-runner/internal/admission"
 	"guarded-agent-runner/internal/domain"
 	"guarded-agent-runner/internal/policy"
@@ -75,7 +79,7 @@ func TestMinecraftLoginCloseRecordsCorrelatedEvidence(t *testing.T) {
 	config := Config{
 		SchemaVersion: ConfigSchemaVersion, AdmissionConfigPath: admissionConfigPath,
 		ServerConfigPath: serverConfigPath,
-		EvidencePath:     filepath.Join(directory, "g02-evidence.json"), MinecraftAddress: listenerAddress,
+		EvidencePath:     filepath.Join(directory, "g02-evidence.json"), MinecraftAddresses: []string{listenerAddress},
 		EnrollmentID: "enrollment-test", ContainerIdentity: "container-full-identity",
 		DataRootIdentity: "dev:1/inode:2", PaperTuple: "paper-test/java-test/image-test",
 		ConnectionDeadlineMS: 1000, RuntimeSettleTimeoutMS: 3000,
@@ -90,13 +94,13 @@ func TestMinecraftLoginCloseRecordsCorrelatedEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if evidence.MinecraftLogin == nil || evidence.MinecraftLogin.Result != "PASS" ||
-		!evidence.MinecraftLogin.LoginStartSent || !evidence.MinecraftLogin.ConnectionAliveBeforeClose ||
-		evidence.MinecraftLogin.PlayerCountAfter != 0 {
-		t.Fatalf("incomplete Minecraft login-close evidence: %+v", evidence.MinecraftLogin)
+	if len(evidence.MinecraftLogins) != 1 || evidence.MinecraftLogins[0].Result != "PASS" ||
+		!evidence.MinecraftLogins[0].LoginStartSent || !evidence.MinecraftLogins[0].ConnectionAliveBeforeClose ||
+		evidence.MinecraftLogins[0].PlayerCountAfter != 0 {
+		t.Fatalf("incomplete Minecraft login-close evidence: %+v", evidence.MinecraftLogins)
 	}
 	reopened, err := loadEvidence(config.EvidencePath)
-	if err != nil || reopened.MinecraftLogin == nil || reopened.MinecraftLogin.Result != "PASS" {
+	if err != nil || len(reopened.MinecraftLogins) != 1 || reopened.MinecraftLogins[0].Result != "PASS" {
 		t.Fatalf("durable evidence did not reopen: %+v err=%v", reopened, err)
 	}
 	select {
@@ -138,7 +142,7 @@ func TestHostRebootCheckpointRequiresChangedKernelBootID(t *testing.T) {
 	config := Config{
 		SchemaVersion: ConfigSchemaVersion, AdmissionConfigPath: admissionConfigPath,
 		ServerConfigPath: serverConfigPath,
-		EvidencePath:     filepath.Join(directory, "evidence.json"), MinecraftAddress: minecraftAddress,
+		EvidencePath:     filepath.Join(directory, "evidence.json"), MinecraftAddresses: []string{minecraftAddress},
 		EnrollmentID: "enrollment", ContainerIdentity: "container", DataRootIdentity: "root",
 		PaperTuple: "tuple", ConnectionDeadlineMS: 250, RuntimeSettleTimeoutMS: 1000,
 	}
@@ -146,6 +150,7 @@ func TestHostRebootCheckpointRequiresChangedKernelBootID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	startClosedGate(t, admissionConfig)
 	runner.bootID = func() (string, error) { return "boot-before-000000000000", nil }
 	prepared, err := runner.PrepareHostReboot(context.Background())
 	if err != nil || prepared.HostReboot == nil || prepared.HostReboot.Result != "PREPARED" {
@@ -158,10 +163,205 @@ func TestHostRebootCheckpointRequiresChangedKernelBootID(t *testing.T) {
 		t.Fatalf("re-prepare after a premature verification failed: %v", err)
 	}
 	runner.bootID = func() (string, error) { return "boot-after-0000000000000", nil }
+	refreshHostObservation(t, runner)
+	writeRuntime(t, admissionConfig, "MAINTENANCE")
 	verified, err := runner.VerifyHostReboot(context.Background())
 	if err != nil || verified.HostReboot.Result != "PASS" || !verified.HostReboot.EndpointClosedAfter {
 		t.Fatalf("verify failed: %+v err=%v", verified.HostReboot, err)
 	}
+}
+
+func TestHostRebootCheckpointRejectsReopenedAdmissionAndReachableEndpoint(t *testing.T) {
+	t.Run("admission reopened", func(t *testing.T) {
+		runner, admissionConfig := newNegativeRebootRunner(t)
+		runner.bootID = func() (string, error) { return "boot-before-000000000000", nil }
+		if _, err := runner.PrepareHostReboot(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		runner.bootID = func() (string, error) { return "boot-after-0000000000000", nil }
+		now := time.Now().UTC()
+		if _, err := admission.WriteState(admissionConfig, admission.ModeOpen, "unsafe-reopen", 20*time.Second, now); err != nil {
+			t.Fatal(err)
+		}
+		writeRuntime(t, admissionConfig, "OPEN_READ_ONLY_ALPHA")
+		evidence, err := runner.VerifyHostReboot(context.Background())
+		if err == nil || evidence.HostReboot.Result != "FAIL" || evidence.HostReboot.PostAdmissionReason != "ADMISSION_OPEN_GUARD_CONFIRMED" {
+			t.Fatalf("reopened admission must fail reboot evidence: %+v err=%v", evidence.HostReboot, err)
+		}
+	})
+
+	t.Run("endpoint reachable while state is closed", func(t *testing.T) {
+		runner, _ := newNegativeRebootRunner(t)
+		runner.bootID = func() (string, error) { return "boot-before-000000000000", nil }
+		if _, err := runner.PrepareHostReboot(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		runner.probeClosedGate = func(string, time.Duration) error {
+			return fmt.Errorf("closed gate returned Minecraft protocol data")
+		}
+		runner.bootID = func() (string, error) { return "boot-after-0000000000000", nil }
+		refreshHostObservation(t, runner)
+		writeRuntime(t, runner.admission, "MAINTENANCE")
+		evidence, err := runner.VerifyHostReboot(context.Background())
+		if err == nil || evidence.HostReboot.Result != "FAIL" || evidence.HostReboot.EndpointClosedAfter {
+			t.Fatalf("reachable endpoint must fail reboot evidence: %+v err=%v", evidence.HostReboot, err)
+		}
+	})
+
+	t.Run("host observation missing after reboot", func(t *testing.T) {
+		runner, _ := newNegativeRebootRunner(t)
+		runner.bootID = func() (string, error) { return "boot-before-000000000000", nil }
+		if _, err := runner.PrepareHostReboot(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Remove(runner.server.HostObservation.SnapshotPath); err != nil {
+			t.Fatal(err)
+		}
+		runner.bootID = func() (string, error) { return "boot-after-0000000000000", nil }
+		evidence, err := runner.VerifyHostReboot(context.Background())
+		if err == nil || evidence.HostReboot.Result != "FAIL" || evidence.HostReboot.EndpointClosedAfter {
+			t.Fatalf("missing live host observation must fail reboot evidence: %+v err=%v", evidence.HostReboot, err)
+		}
+	})
+
+	t.Run("host observation not refreshed after reboot", func(t *testing.T) {
+		runner, _ := newNegativeRebootRunner(t)
+		runner.bootID = func() (string, error) { return "boot-before-000000000000", nil }
+		if _, err := runner.PrepareHostReboot(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		runner.bootID = func() (string, error) { return "boot-after-0000000000000", nil }
+		evidence, err := runner.VerifyHostReboot(context.Background())
+		if err == nil || !strings.Contains(err.Error(), "not refreshed") || evidence.HostReboot.Result != "FAIL" {
+			t.Fatalf("pre-reboot host observation must not prove recovery: %+v err=%v", evidence.HostReboot, err)
+		}
+	})
+
+	t.Run("Paper runtime not in maintenance after reboot", func(t *testing.T) {
+		runner, admissionConfig := newNegativeRebootRunner(t)
+		runner.bootID = func() (string, error) { return "boot-before-000000000000", nil }
+		if _, err := runner.PrepareHostReboot(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		refreshHostObservation(t, runner)
+		writeRuntime(t, admissionConfig, "OPEN_READ_ONLY_ALPHA")
+		runner.bootID = func() (string, error) { return "boot-after-0000000000000", nil }
+		evidence, err := runner.VerifyHostReboot(context.Background())
+		if err == nil || evidence.HostReboot.Result != "FAIL" || evidence.HostReboot.EndpointClosedAfter {
+			t.Fatalf("non-maintenance runtime must fail reboot evidence: %+v err=%v", evidence.HostReboot, err)
+		}
+	})
+}
+
+func TestProbeClosedGateRequiresReachableGateDrivenClose(t *testing.T) {
+	closedListener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	closedAddress := closedListener.Addr().String()
+	go func() {
+		connection, acceptErr := closedListener.Accept()
+		if acceptErr == nil {
+			_ = connection.Close()
+		}
+	}()
+	if err := probeClosedGate(closedAddress, 250*time.Millisecond); err != nil {
+		t.Fatalf("reachable gate-driven close rejected: %v", err)
+	}
+	_ = closedListener.Close()
+
+	refusedAddress := freeAddress(t)
+	if err := probeClosedGate(refusedAddress, 100*time.Millisecond); err == nil {
+		t.Fatal("connection refusal must not count as gate-driven closure")
+	}
+
+	statusListener := startStatusServerAt(t, freeAddress(t))
+	defer statusListener.Close()
+	if err := probeClosedGate(statusListener.Addr().String(), 250*time.Millisecond); err == nil {
+		t.Fatal("a reachable Minecraft status endpoint must not count as closed")
+	}
+
+	hangingListener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer hangingListener.Close()
+	hangingDone := make(chan struct{})
+	go func() {
+		defer close(hangingDone)
+		connection, acceptErr := hangingListener.Accept()
+		if acceptErr != nil {
+			return
+		}
+		defer connection.Close()
+		<-time.After(300 * time.Millisecond)
+	}()
+	if err := probeClosedGate(hangingListener.Addr().String(), 50*time.Millisecond); err == nil {
+		t.Fatal("a hanging listener must not count as gate-driven closure")
+	}
+	<-hangingDone
+}
+
+func newNegativeRebootRunner(t *testing.T) (*Runner, admission.Config) {
+	t.Helper()
+	directory := t.TempDir()
+	if err := os.Chmod(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	minecraftAddress := freeAddress(t)
+	admissionConfig := admission.Config{
+		SchemaVersion: admission.ConfigSchemaVersion, PairingID: "g02-negative-pairing",
+		DeploymentGeneration: 3, ListenAddresses: []string{minecraftAddress},
+		UpstreamAddress: "127.0.0.1:25566", StatePath: filepath.Join(directory, "state.json"),
+		RuntimeSnapshotPath:      filepath.Join(directory, "runtime.json"),
+		PollIntervalMilliseconds: 25, DialTimeoutMilliseconds: 200, MaxConnections: 16,
+	}
+	admissionConfigPath := filepath.Join(directory, "admission.json")
+	writeJSONFile(t, admissionConfigPath, admissionConfig)
+	serverConfigPath := filepath.Join(directory, "server.json")
+	writeServerConfig(t, serverConfigPath, admissionConfig, "enrollment", "container", "root", "tuple")
+	if _, err := admission.WriteState(admissionConfig, admission.ModeClosed, "test", 0, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	writeRuntime(t, admissionConfig, "MAINTENANCE")
+	config := Config{
+		SchemaVersion: ConfigSchemaVersion, AdmissionConfigPath: admissionConfigPath,
+		ServerConfigPath: serverConfigPath,
+		EvidencePath:     filepath.Join(directory, "evidence.json"), MinecraftAddresses: []string{minecraftAddress},
+		EnrollmentID: "enrollment", ContainerIdentity: "container", DataRootIdentity: "root",
+		PaperTuple: "tuple", ConnectionDeadlineMS: 250, RuntimeSettleTimeoutMS: 1000,
+	}
+	runner, err := NewRunner(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	startClosedGate(t, admissionConfig)
+	return runner, admissionConfig
+}
+
+func startStatusServerAt(t *testing.T, address string) net.Listener {
+	t.Helper()
+	listener, err := net.Listen("tcp4", address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		connection, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			return
+		}
+		defer connection.Close()
+		reader := bufio.NewReader(connection)
+		if _, _, readErr := readPacket(reader); readErr != nil {
+			return
+		}
+		if _, _, readErr := readPacket(reader); readErr != nil {
+			return
+		}
+		status := `{"version":{"name":"Paper 26.2","protocol":776},"players":{"max":20,"online":0}}`
+		_ = writePacket(connection, 0, appendString(nil, status))
+	}()
+	return listener
 }
 
 func startMinecraftServer(t *testing.T) (net.Listener, <-chan error) {
@@ -259,6 +459,36 @@ func waitForListener(t *testing.T, address string) {
 	}
 }
 
+func startClosedGate(t *testing.T, config admission.Config) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	gate, err := admission.NewGate(config, io.Discard)
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	go func() { _ = gate.Run(ctx) }()
+	for _, address := range config.ListenAddresses {
+		waitForListener(t, address)
+	}
+	t.Cleanup(cancel)
+}
+
+func refreshHostObservation(t *testing.T, runner *Runner) {
+	t.Helper()
+	path := runner.server.HostObservation.SnapshotPath
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var snapshot hostadapter.Snapshot
+	if err := json.Unmarshal(payload, &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	snapshot.ObservedAt = time.Now().UTC()
+	writeJSONFile(t, path, snapshot)
+}
+
 func writeJSONFile(t *testing.T, path string, value any) {
 	t.Helper()
 	payload, err := json.Marshal(value)
@@ -277,19 +507,50 @@ func writeServerConfig(
 	enrollmentID, containerIdentity, dataRootIdentity, paperTuple string,
 ) {
 	t.Helper()
+	publishedBindings := make([]hostadapter.PublishedBinding, 0, len(admissionConfig.ListenAddresses))
+	for _, address := range admissionConfig.ListenAddresses {
+		hostIP, portText, err := net.SplitHostPort(address)
+		if err != nil {
+			t.Fatal(err)
+		}
+		port, err := strconv.Atoi(portText)
+		if err != nil {
+			t.Fatal(err)
+		}
+		publishedBindings = append(publishedBindings, hostadapter.PublishedBinding{
+			HostIP: hostIP, HostPort: port, ContainerPort: port, Protocol: "tcp",
+		})
+	}
+	hostSnapshotPath := filepath.Join(filepath.Dir(path), "host-observation.json")
 	config := runtimeconfig.Config{
 		SchemaVersion: runtimeconfig.SchemaVersion,
 		Enrollment: domain.Enrollment{
 			TargetID: "target", EnrollmentID: enrollmentID,
 			DeploymentGeneration: admissionConfig.DeploymentGeneration,
-			ContainerID:          containerIdentity, DataRootIdentity: dataRootIdentity,
+			ContainerID:          containerIdentity, ImageDigest: "test-image", DataRootIdentity: dataRootIdentity,
 			RuntimeGuardPairing: admissionConfig.PairingID, SupportProfileID: "read-only-test",
-			PaperTuple: paperTuple, AllowedPlugins: []string{"gar-guard"},
+			PaperTuple: paperTuple, BootstrapFingerprint: strings.Repeat("0", 64),
+			AllowedPlugins: []string{"gar-guard"},
 		},
 		Artifacts: map[string]domain.ArtifactRecord{}, Profiles: map[string]domain.TransitionProfile{},
 		Support:                policy.SupportProfile{ProfileID: "read-only-test", Mode: policy.ModeReadOnly},
 		CurrentRevocationEpoch: 1,
+		PaperRuntime:           &runtimeconfig.PaperRuntimeSource{SnapshotPath: admissionConfig.RuntimeSnapshotPath},
+		HostObservation:        &runtimeconfig.HostObservationSource{SnapshotPath: hostSnapshotPath},
 	}
+	writeJSONFile(t, hostSnapshotPath, hostadapter.Snapshot{
+		SchemaVersion: hostadapter.SnapshotSchemaVersion, Availability: domain.Available,
+		ObservedAt: time.Now().UTC(), EnrollmentID: enrollmentID,
+		DeploymentGeneration: admissionConfig.DeploymentGeneration, ContainerID: containerIdentity,
+		ImageID: "test-image", ContainerStatus: "running", Running: true, HealthStatus: "healthy",
+		RestartPolicy: "no", DataRootIdentity: dataRootIdentity,
+		BootstrapFingerprint: strings.Repeat("0", 64), InventoryDigest: strings.Repeat("1", 64),
+		PluginArtifacts: []hostadapter.PluginArtifact{}, CompetingStartupWriters: []string{}, DiskFreeBytes: 1,
+		RecentErrorsAvailability: domain.Unavailable, RecentErrorsReasonCode: "PAPER_LOG_UNAVAILABLE",
+		RecentErrors: []string{}, AdmissionBarrierAvailability: domain.Available,
+		AdmissionBarrierReasonCode: "ADMISSION_CLOSED", AdmissionOpen: false,
+		AdmissionGateContainerID: strings.Repeat("2", 64), AdmissionPublishedBindings: publishedBindings,
+	})
 	writeJSONFile(t, path, config)
 }
 

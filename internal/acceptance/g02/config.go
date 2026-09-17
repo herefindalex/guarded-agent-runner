@@ -17,20 +17,20 @@ import (
 	"guarded-agent-runner/internal/strictjson"
 )
 
-const ConfigSchemaVersion = "gar.g02-acceptance-config.v1"
+const ConfigSchemaVersion = "gar.g02-acceptance-config.v2"
 
 type Config struct {
-	SchemaVersion          string `json:"schema_version"`
-	AdmissionConfigPath    string `json:"admission_config_path"`
-	ServerConfigPath       string `json:"server_config_path"`
-	EvidencePath           string `json:"evidence_path"`
-	MinecraftAddress       string `json:"minecraft_address"`
-	EnrollmentID           string `json:"enrollment_id"`
-	ContainerIdentity      string `json:"container_identity"`
-	DataRootIdentity       string `json:"data_root_identity"`
-	PaperTuple             string `json:"paper_tuple"`
-	ConnectionDeadlineMS   int    `json:"connection_deadline_milliseconds"`
-	RuntimeSettleTimeoutMS int    `json:"runtime_settle_timeout_milliseconds"`
+	SchemaVersion          string   `json:"schema_version"`
+	AdmissionConfigPath    string   `json:"admission_config_path"`
+	ServerConfigPath       string   `json:"server_config_path"`
+	EvidencePath           string   `json:"evidence_path"`
+	MinecraftAddresses     []string `json:"minecraft_addresses"`
+	EnrollmentID           string   `json:"enrollment_id"`
+	ContainerIdentity      string   `json:"container_identity"`
+	DataRootIdentity       string   `json:"data_root_identity"`
+	PaperTuple             string   `json:"paper_tuple"`
+	ConnectionDeadlineMS   int      `json:"connection_deadline_milliseconds"`
+	RuntimeSettleTimeoutMS int      `json:"runtime_settle_timeout_milliseconds"`
 }
 
 func LoadConfig(path string) (Config, error) {
@@ -79,13 +79,23 @@ func (config Config) Validate() error {
 		config.AdmissionConfigPath == config.ServerConfigPath {
 		return fmt.Errorf("admission, server, and evidence paths must be distinct")
 	}
-	host, port, err := net.SplitHostPort(config.MinecraftAddress)
-	if err != nil {
-		return fmt.Errorf("minecraft_address: %w", err)
+	if len(config.MinecraftAddresses) < 1 || len(config.MinecraftAddresses) > 4 {
+		return fmt.Errorf("minecraft_addresses must contain one through four fixed bindings")
 	}
-	ip := net.ParseIP(host)
-	if ip == nil || !ip.IsLoopback() || port == "" || port == "0" {
-		return fmt.Errorf("minecraft_address must use a literal loopback address and non-zero port")
+	seenAddresses := make(map[string]struct{}, len(config.MinecraftAddresses))
+	for _, address := range config.MinecraftAddresses {
+		host, port, err := net.SplitHostPort(address)
+		if err != nil {
+			return fmt.Errorf("minecraft_addresses: %w", err)
+		}
+		ip := net.ParseIP(host)
+		if ip == nil || !ip.IsLoopback() || port == "" || port == "0" {
+			return fmt.Errorf("minecraft_addresses must use literal loopback addresses and non-zero ports")
+		}
+		if _, exists := seenAddresses[address]; exists {
+			return fmt.Errorf("duplicate minecraft address %q", address)
+		}
+		seenAddresses[address] = struct{}{}
 	}
 	for name, value := range map[string]string{
 		"enrollment_id":      config.EnrollmentID,

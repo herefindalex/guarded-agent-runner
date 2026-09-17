@@ -1,9 +1,9 @@
 {
-  "schema_version": "gar.g02-acceptance-config.v1",
+  "schema_version": "gar.g02-acceptance-config.v2",
   "admission_config_path": "/REPLACE/ABSOLUTE/PATH/examples/itzg-paper/evidence/admission/config.json",
   "server_config_path": "/REPLACE/ABSOLUTE/PATH/examples/itzg-paper/evidence/server-config.json",
   "evidence_path": "/REPLACE/ABSOLUTE/PATH/examples/itzg-paper/evidence/g02-acceptance.json",
-  "minecraft_address": "127.0.0.1:25565",
+  "minecraft_addresses": ["127.0.0.1:25565", "[::1]:25565"],
   "enrollment_id": "REPLACE_FROM_OWNER_ENROLLMENT",
   "container_identity": "REPLACE_WITH_FULL_CONTAINER_ID",
   "data_root_identity": "REPLACE_WITH_DEV_AND_INODE",

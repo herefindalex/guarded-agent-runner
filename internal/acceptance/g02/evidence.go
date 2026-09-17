@@ -14,10 +14,11 @@ import (
 	"guarded-agent-runner/internal/strictjson"
 )
 
-const EvidenceSchemaVersion = "gar.g02-acceptance-evidence.v1"
+const EvidenceSchemaVersion = "gar.g02-acceptance-evidence.v2"
 
 type MinecraftLoginEvidence struct {
 	EvidenceLevel              string    `json:"evidence_level"`
+	MinecraftAddress           string    `json:"minecraft_address"`
 	ObservedAt                 time.Time `json:"observed_at"`
 	ProtocolVersion            int32     `json:"protocol_version"`
 	ProtocolName               string    `json:"protocol_name"`
@@ -50,17 +51,17 @@ type HostRebootEvidence struct {
 }
 
 type Evidence struct {
-	SchemaVersion        string                  `json:"schema_version"`
-	EnrollmentID         string                  `json:"enrollment_id"`
-	DeploymentGeneration int64                   `json:"deployment_generation"`
-	ContainerIdentity    string                  `json:"container_identity"`
-	DataRootIdentity     string                  `json:"data_root_identity"`
-	PaperTuple           string                  `json:"paper_tuple"`
-	PairingID            string                  `json:"pairing_id"`
-	MinecraftAddress     string                  `json:"minecraft_address"`
-	UpdatedAt            time.Time               `json:"updated_at"`
-	MinecraftLogin       *MinecraftLoginEvidence `json:"minecraft_inflight_login,omitempty"`
-	HostReboot           *HostRebootEvidence     `json:"host_reboot,omitempty"`
+	SchemaVersion        string                   `json:"schema_version"`
+	EnrollmentID         string                   `json:"enrollment_id"`
+	DeploymentGeneration int64                    `json:"deployment_generation"`
+	ContainerIdentity    string                   `json:"container_identity"`
+	DataRootIdentity     string                   `json:"data_root_identity"`
+	PaperTuple           string                   `json:"paper_tuple"`
+	PairingID            string                   `json:"pairing_id"`
+	MinecraftAddresses   []string                 `json:"minecraft_addresses"`
+	UpdatedAt            time.Time                `json:"updated_at"`
+	MinecraftLogins      []MinecraftLoginEvidence `json:"minecraft_inflight_logins,omitempty"`
+	HostReboot           *HostRebootEvidence      `json:"host_reboot,omitempty"`
 }
 
 func newEvidence(config Config, deploymentGeneration int64, pairingID string, now time.Time) Evidence {
@@ -68,7 +69,7 @@ func newEvidence(config Config, deploymentGeneration int64, pairingID string, no
 		SchemaVersion: EvidenceSchemaVersion, EnrollmentID: config.EnrollmentID,
 		DeploymentGeneration: deploymentGeneration, ContainerIdentity: config.ContainerIdentity,
 		DataRootIdentity: config.DataRootIdentity, PaperTuple: config.PaperTuple,
-		PairingID: pairingID, MinecraftAddress: config.MinecraftAddress, UpdatedAt: now.UTC(),
+		PairingID: pairingID, MinecraftAddresses: append([]string(nil), config.MinecraftAddresses...), UpdatedAt: now.UTC(),
 	}
 }
 
